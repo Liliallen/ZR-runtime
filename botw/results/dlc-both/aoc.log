@@ -1,0 +1,7 @@
+00:00:00.168 |I| Application AddAocItem: Found AddOnContent with TitleId 01007EF00011F002
+00:00:00.169 |I| Application AddAocItem: Found AddOnContent with TitleId 01007EF00011F001
+00:00:04.597 |I| HLE.OsThread.47 ServiceNs ListAddContentImpl: BOTW-PC: game listed add-on content indices [1, 2] (base 01007EF00011F000).
+00:00:04.598 |S| HLE.OsThread.47 ServiceNs PrepareAddOnContentImpl: Stubbed. {index: 1}
+00:00:04.599 |I| HLE.OsThread.2 Loader OpenDataStorageByDataId: Opened AddOnContent Data TitleID=01007EF00011F001
+00:00:04.600 |S| HLE.OsThread.47 ServiceNs PrepareAddOnContentImpl: Stubbed. {index: 1}
+00:00:04.600 |I| HLE.OsThread.2 Loader OpenDataStorageByDataId: Opened AddOnContent Data TitleID=01007EF00011F001

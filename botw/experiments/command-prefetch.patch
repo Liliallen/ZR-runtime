@@ -1,0 +1,67 @@
+diff --git a/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoProcessor.cs b/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoProcessor.cs
+index 8260949db..dd7a78c70 100644
+--- a/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoProcessor.cs
++++ b/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoProcessor.cs
+@@ -185,6 +185,11 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
+             // through Send() (a large non-inlined method that re-derives the destination for every word).
+             bool fastDispatch = GpuFrontend.FastDispatch;
+ 
++            if (GpuFrontend.CommandPrefetch)
++            {
++                PrefetchCommands(commandBuffer);
++            }
++
+             for (int index = 0; index < commandBuffer.Length; index++)
+             {
+                 int command = commandBuffer[index];
+@@ -273,6 +278,34 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
+             _3dClass.FlushUboDirty();
+         }
+ 
++        /// <summary>
++        /// BOTW-PC optimized front end: requests the first 4 KiB of a command buffer into the cache before decoding it.
++        /// BotW sends ~4 700 command buffers per frame, ~54 words each, written by the game's CPU threads just before:
++        /// decoding one word at a time waits for each cache line in turn (a third of the decode loop's samples sat on
++        /// the load of the command word), and the buffers are too short for the hardware prefetcher to get ahead.
++        /// A prefetch is only a hint: it changes no data and no order. x86 only (no-op elsewhere).
++        /// </summary>
++        [MethodImpl(MethodImplOptions.AggressiveInlining)]
++        private static unsafe void PrefetchCommands(ReadOnlySpan<int> commandBuffer)
++        {
++            if (!System.Runtime.Intrinsics.X86.Sse.IsSupported)
++            {
++                return;
++            }
++
++            int bytes = Math.Min(commandBuffer.Length * sizeof(int), 4096);
++
++            fixed (int* words = commandBuffer)
++            {
++                byte* data = (byte*)words;
++
++                for (int offset = 0; offset < bytes; offset += 64)
++                {
++                    System.Runtime.Intrinsics.X86.Sse.Prefetch0(data + offset);
++                }
++            }
++        }
++
+         /// <summary>
+         /// Tries to perform a fast Inline-to-Memory data update.
+         /// If successful, all data will be copied at once, and <see cref="DmaState.MethodCount"/>
+diff --git a/src/Ryujinx.Graphics.Gpu/Engine/GpuFrontend.cs b/src/Ryujinx.Graphics.Gpu/Engine/GpuFrontend.cs
+index 17eca970e..c5099eb8d 100644
+--- a/src/Ryujinx.Graphics.Gpu/Engine/GpuFrontend.cs
++++ b/src/Ryujinx.Graphics.Gpu/Engine/GpuFrontend.cs
+@@ -34,6 +34,11 @@ namespace Ryujinx.Graphics.Gpu.Engine
+             return optimized;
+         }
+ 
++        private static readonly AbPhase.Switch _commandPrefetch = new("BOTWPC_FE_PREFETCH");
++
++        /// <summary>Software prefetch of a command buffer's cache lines before it is decoded (GPFifoProcessor).</summary>
++        public static bool CommandPrefetch => Optimized && _commandPrefetch.IsOn;
++
+         private static readonly AbPhase.Switch _fastDispatch = new("BOTWPC_FE_FAST_DISPATCH");
+ 
+         /// <summary>Direct dispatch of 3D register writes and macro calls from the command stream (GPFifoProcessor).</summary>

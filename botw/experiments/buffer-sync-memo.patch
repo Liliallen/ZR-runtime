@@ -1,0 +1,375 @@
+diff --git a/src/Ryujinx.Graphics.Gpu/Memory/Buffer.cs b/src/Ryujinx.Graphics.Gpu/Memory/Buffer.cs
+index c4b848035..485372bcc 100644
+--- a/src/Ryujinx.Graphics.Gpu/Memory/Buffer.cs
++++ b/src/Ryujinx.Graphics.Gpu/Memory/Buffer.cs
+@@ -47,6 +47,31 @@ namespace Ryujinx.Graphics.Gpu.Memory
+         /// </summary>
+         public int UnmappedSequence { get; private set; }
+ 
++        /// <summary>
++        /// BOTW-PC optimized front end (BufferCache.SyncMemo): changes whenever something other than a new GPU
++        /// sequence number can make <see cref="SynchronizeMemory"/> of a range already synchronized in the current
++        /// sequence do work again: a forced dirty range, forced tracking dirt, an unmap, a virtual buffer dependency.
++        /// </summary>
++        internal int SyncVersion;
++
++        /// <summary>
++        /// BOTW-PC differential verification: counts the synchronizations that did work (a modified region found, data
++        /// loaded, virtual dependants copied back). A skipped synchronization must not have changed it.
++        /// </summary>
++        internal long SyncWork;
++
++        /// <summary>
++        /// Whether a <see cref="SynchronizeMemory"/> in GPU sequence <paramref name="sequenceNumber"/> skips the
++        /// tracking of ranges already synchronized in it. True for granular tracking (per-handle sequence bitmap). The
++        /// whole-buffer tracking records the sequence only when it found the buffer dirty: until then a later write
++        /// in the same sequence is still picked up (found by the differential verification), so it counts only once
++        /// the recorded sequence is the current one.
++        /// </summary>
++        internal bool SyncGatedBySequence(int sequenceNumber) => _useGranular || _sequenceNumber == sequenceNumber;
++
++        /// <summary>Whether virtual (multi-range) buffers depend on this buffer's data.</summary>
++        internal bool HasVirtualDependencies => _virtualDependencies != null;
++
+         /// <summary>
+         /// Indicates if the buffer can be used in a sparse buffer mapping.
+         /// </summary>
+@@ -284,6 +309,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
+             {
+                 if (_context.SequenceNumber != _sequenceNumber && _memoryTracking.DirtyOrVolatile())
+                 {
++                    SyncWork++;
+                     _memoryTracking.Reprotect();
+ 
+                     if (_modifiedRanges != null)
+@@ -526,6 +552,8 @@ namespace Ryujinx.Graphics.Gpu.Memory
+         /// <param name="mSize">Size of the modified region</param>
+         private void RegionModified(ulong mAddress, ulong mSize)
+         {
++            SyncWork++;
++
+             if (mAddress < Address)
+             {
+                 mAddress = Address;
+@@ -557,6 +585,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
+         /// <param name="mSize">Size of the modified region</param>
+         private void LoadRegion(ulong mAddress, ulong mSize)
+         {
++            SyncWork++;
+             BackingState.RecordSet();
+ 
+             int offset = (int)(mAddress - Address);
+@@ -591,6 +620,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
+         /// <param name="mSize">Size of the region to force dirty</param>
+         public void ForceDirty(ulong mAddress, ulong mSize)
+         {
++            SyncVersion++;
+             _modifiedRanges?.Clear(mAddress, mSize);
+ 
+             ulong end = mAddress + mSize;
+@@ -786,6 +816,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
+             modifiedRanges?.Clear(address, size);
+ 
+             UnmappedSequence++;
++            SyncVersion++;
+         }
+ 
+         /// <summary>
+@@ -874,6 +905,8 @@ namespace Ryujinx.Graphics.Gpu.Memory
+         [MethodImpl(MethodImplOptions.NoInlining)]
+         private void CopyFromDependantVirtualBuffersImpl()
+         {
++            SyncWork++;
++
+             foreach (MultiRangeBuffer virtualBuffer in _virtualDependencies.OrderBy(x => x.ModificationSequenceNumber))
+             {
+                 virtualBuffer.ConsumeModifiedRegion(this, (mAddress, mSize) =>
+diff --git a/src/Ryujinx.Graphics.Gpu/Memory/BufferCache.cs b/src/Ryujinx.Graphics.Gpu/Memory/BufferCache.cs
+index d1d0a4ef3..32ec766bf 100644
+--- a/src/Ryujinx.Graphics.Gpu/Memory/BufferCache.cs
++++ b/src/Ryujinx.Graphics.Gpu/Memory/BufferCache.cs
+@@ -67,6 +67,171 @@ namespace Ryujinx.Graphics.Gpu.Memory
+         /// </summary>
+         public int ModificationSequence => Volatile.Read(ref _modificationSequence);
+ 
++        /// <summary>
++        /// BOTW-PC optimized front end: the last guest-to-host synchronization of one bound range (a vertex, index or
++        /// uniform buffer slot). Every draw synchronizes every bound buffer range. A synchronization in the same GPU
++        /// sequence number as the previous one of the same range is a no-op in the legacy path: the granular tracking
++        /// skips handles already checked in the sequence (MultiRegionHandle's sequence bitmap), the whole-buffer
++        /// tracking compares the sequence it recorded at its last load (<see cref="Buffer.SyncGatedBySequence"/>;
++        /// a clean whole-buffer check records nothing, so it is not skipped), and the only other work (a forced dirty range, forced tracking dirt,
++        /// virtual dependants) is covered by <see cref="Buffer.SyncVersion"/> and
++        /// <see cref="Buffer.HasVirtualDependencies"/>. The buffer still contains the range while
++        /// <see cref="ModificationSequence"/> is unchanged. So while all of those are unchanged, the lookup and the
++        /// synchronization are skipped, and the range of the remembered buffer is the one GetBufferRange returns.
++        /// </summary>
++        internal struct SyncMemo
++        {
++            public BufferCache Cache;
++            public Buffer Buffer;
++            public ulong Address;
++            public ulong Size;
++            public int ContextSequence;
++            public int CacheSequence;
++            public int BufferVersion;
++        }
++
++        [MethodImpl(MethodImplOptions.AggressiveInlining)]
++        private bool IsCurrent(in SyncMemo memo, ulong address, ulong size)
++        {
++            Buffer buffer = memo.Buffer;
++
++            return buffer != null &&
++                ReferenceEquals(memo.Cache, this) &&
++                memo.Address == address &&
++                memo.Size == size &&
++                memo.ContextSequence == _context.SequenceNumber &&
++                memo.CacheSequence == _modificationSequence &&
++                memo.BufferVersion == buffer.SyncVersion &&
++                !buffer.HasVirtualDependencies &&
++                buffer.SyncGatedBySequence(memo.ContextSequence);
++        }
++
++        [MethodImpl(MethodImplOptions.AggressiveInlining)]
++        private static void CountMemo(bool hit)
++        {
++            if (Engine.FrontendStats.Enabled)
++            {
++                Engine.FrontendStats.E(hit ? Engine.FrontendStats.Ev.SyncMemoHits : Engine.FrontendStats.Ev.SyncMemoMisses);
++            }
++        }
++
++        /// <summary>
++        /// Looks up and synchronizes a single range, recording the memo (sequences read before the work, so a change
++        /// while it runs invalidates the memo).
++        /// </summary>
++        private Buffer SynchronizeAndRemember(ulong address, ulong size, ref SyncMemo memo)
++        {
++            CountMemo(false);
++            int contextSequence = _context.SequenceNumber;
++            int cacheSequence = _modificationSequence;
++
++            Buffer buffer = FindOverlapCached(address, size);
++            int version = buffer.SyncVersion;
++
++            buffer.CopyFromDependantVirtualBuffers();
++            buffer.SynchronizeMemory(address, size);
++
++            memo = new SyncMemo
++            {
++                Cache = this,
++                Buffer = buffer,
++                Address = address,
++                Size = size,
++                ContextSequence = contextSequence,
++                CacheSequence = cacheSequence,
++                BufferVersion = version,
++            };
++
++            return buffer;
++        }
++
++        /// <summary>
++        /// <see cref="SynchronizeBufferRange(MultiRange)"/> with a per-binding memo (<see cref="SyncMemo"/>).
++        /// </summary>
++        public void SynchronizeBufferRange(MultiRange range, ref SyncMemo memo)
++        {
++            if (!Engine.GpuFrontend.SyncMemo || range.Count != 1)
++            {
++                SynchronizeBufferRange(range);
++                return;
++            }
++
++            MemoryRange subRange = range.GetSubRange(0);
++
++            if (subRange.Size == 0)
++            {
++                return;
++            }
++
++            if (IsCurrent(memo, subRange.Address, subRange.Size))
++            {
++                CountMemo(true);
++
++                if (Engine.FrontendVerify.Enabled)
++                {
++                    VerifySkippedSync(memo, subRange.Address, subRange.Size, null);
++                }
++
++                return;
++            }
++
++            SynchronizeAndRemember(subRange.Address, subRange.Size, ref memo);
++        }
++
++        /// <summary>
++        /// <see cref="GetBufferRange(MultiRange, BufferStage, bool)"/> for a read-only binding, with a per-binding memo
++        /// (<see cref="SyncMemo"/>).
++        /// </summary>
++        public BufferRange GetBufferRange(MultiRange range, BufferStage stage, ref SyncMemo memo)
++        {
++            if (!Engine.GpuFrontend.SyncMemo || range.Count != 1 || range.GetSubRange(0).Size == 0)
++            {
++                return GetBufferRange(range, stage);
++            }
++
++            MemoryRange subRange = range.GetSubRange(0);
++
++            if (IsCurrent(memo, subRange.Address, subRange.Size))
++            {
++                CountMemo(true);
++                BufferRange cached = memo.Buffer.GetRange(subRange.Address, subRange.Size, false);
++
++                if (Engine.FrontendVerify.Enabled)
++                {
++                    VerifySkippedSync(memo, subRange.Address, subRange.Size, cached);
++                }
++
++                return cached;
++            }
++
++            return SynchronizeAndRemember(subRange.Address, subRange.Size, ref memo).GetRange(subRange.Address, subRange.Size, false);
++        }
++
++        /// <summary>
++        /// Differential verification of a skipped synchronization: runs the legacy lookup and synchronization (whose
++        /// effects then apply, as in the legacy path) and checks that it found the remembered buffer, returned the same
++        /// range and did no work.
++        /// </summary>
++        private void VerifySkippedSync(in SyncMemo memo, ulong address, ulong size, BufferRange? cached)
++        {
++            Buffer buffer = FindOverlapCached(address, size);
++            long workBefore = buffer.SyncWork;
++
++            buffer.CopyFromDependantVirtualBuffers();
++            buffer.SynchronizeMemory(address, size);
++
++            long work = buffer.SyncWork - workBefore;
++            BufferRange legacy = buffer.GetRange(address, size, false);
++            Buffer memoBuffer = memo.Buffer;
++            bool match = ReferenceEquals(buffer, memoBuffer) && work == 0 &&
++                (cached == null || (cached.Value.Handle == legacy.Handle && cached.Value.Offset == legacy.Offset && cached.Value.Size == legacy.Size));
++
++            Engine.FrontendVerify.Compare(Engine.FrontendVerify.Check.SyncMemo, match, () =>
++                $"range 0x{address:x}+0x{size:x}: legacy buffer 0x{buffer.Address:x}+0x{buffer.Size:x} (same object: {ReferenceEquals(buffer, memoBuffer)}), " +
++                $"legacy synchronization work {work}, cached range {(cached == null ? "-" : $"{cached.Value.Handle}+{cached.Value.Offset}+{cached.Value.Size}")}, " +
++                $"legacy range {legacy.Handle}+{legacy.Offset}+{legacy.Size}, sequence {_context.SequenceNumber}");
++        }
++
+         private readonly Dictionary<ulong, BufferCacheEntry> _dirtyCache;
+         private readonly Dictionary<ulong, BufferCacheEntry> _modifiedCache;
+         private bool _pruneCaches;
+diff --git a/src/Ryujinx.Graphics.Gpu/Memory/BufferManager.cs b/src/Ryujinx.Graphics.Gpu/Memory/BufferManager.cs
+index c18dcb82b..a712ac934 100644
+--- a/src/Ryujinx.Graphics.Gpu/Memory/BufferManager.cs
++++ b/src/Ryujinx.Graphics.Gpu/Memory/BufferManager.cs
+@@ -31,6 +31,10 @@ namespace Ryujinx.Graphics.Gpu.Memory
+         private readonly List<BufferTextureArrayBinding<IImageArray>> _bufferImageArrays;
+         private readonly BufferAssignment[] _ranges;
+ 
++        // BOTW-PC optimized front end: last synchronization of the index buffer and of each vertex buffer slot.
++        private BufferCache.SyncMemo _indexSync;
++        private readonly BufferCache.SyncMemo[] _vertexSync = new BufferCache.SyncMemo[Constants.TotalVertexBuffers];
++
+         /// <summary>
+         /// Holds shader stage buffer state and binding information.
+         /// </summary>
+@@ -51,6 +55,11 @@ namespace Ryujinx.Graphics.Gpu.Memory
+             /// </summary>
+             public bool[] Unaligned { get; }
+ 
++            /// <summary>
++            /// BOTW-PC optimized front end: last synchronization of each slot (BufferCache.SyncMemo).
++            /// </summary>
++            public BufferCache.SyncMemo[] Sync { get; }
++
+             /// <summary>
+             /// Total amount of buffers used on the shader.
+             /// </summary>
+@@ -65,6 +74,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
+                 Bindings = new BufferDescriptor[count];
+                 Buffers = new BufferBounds[count];
+                 Unaligned = new bool[count];
++                Sync = new BufferCache.SyncMemo[count];
+ 
+                 Buffers.AsSpan().Fill(new BufferBounds(new MultiRange(MemoryManager.PteUnmapped, 0UL)));
+             }
+@@ -710,7 +720,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
+                             Engine.FrontendStats.E(Engine.FrontendStats.Ev.IndexBind);
+                         }
+ 
+-                        BufferRange buffer = bufferCache.GetBufferRange(_indexBuffer.Range, BufferStage.IndexBuffer);
++                        BufferRange buffer = bufferCache.GetBufferRange(_indexBuffer.Range, BufferStage.IndexBuffer, ref _indexSync);
+ 
+                         _context.Renderer.Pipeline.SetIndexBuffer(buffer, _indexBuffer.Type);
+                     }
+@@ -722,7 +732,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
+                         Engine.FrontendStats.E(Engine.FrontendStats.Ev.IndexSync);
+                     }
+ 
+-                    bufferCache.SynchronizeBufferRange(_indexBuffer.Range);
++                    bufferCache.SynchronizeBufferRange(_indexBuffer.Range, ref _indexSync);
+                 }
+             }
+             else if (_rebind)
+@@ -752,7 +762,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
+                         Engine.FrontendStats.E(Engine.FrontendStats.Ev.VertexBind);
+                     }
+ 
+-                    BufferRange buffer = bufferCache.GetBufferRange(vb.Range, BufferStage.VertexBuffer);
++                    BufferRange buffer = bufferCache.GetBufferRange(vb.Range, BufferStage.VertexBuffer, ref _vertexSync[index]);
+ 
+                     vertexBuffers[index] = new VertexBufferDescriptor(buffer, vb.Stride, vb.Divisor);
+                 }
+@@ -775,7 +785,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
+                         Engine.FrontendStats.E(Engine.FrontendStats.Ev.VertexSync);
+                     }
+ 
+-                    bufferCache.SynchronizeBufferRange(vb.Range);
++                    bufferCache.SynchronizeBufferRange(vb.Range, ref _vertexSync[index]);
+                 }
+             }
+ 
+@@ -929,7 +939,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
+                         bool isWrite = (bounds.Flags & BufferUsageFlags.Write) == BufferUsageFlags.Write;
+                         BufferRange range = isStorage
+                             ? bufferCache.GetBufferRangeAligned(bounds.Range, bufferStage | BufferStageUtils.FromUsage(bounds.Flags), isWrite)
+-                            : bufferCache.GetBufferRange(bounds.Range, bufferStage);
++                            : bufferCache.GetBufferRange(bounds.Range, bufferStage, ref buffers.Sync[bindingInfo.Slot]);
+ 
+                         ranges[rangesCount++] = new BufferAssignment(bindingInfo.Binding, range);
+                     }
+@@ -1023,7 +1033,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
+                         Engine.FrontendStats.E(ReferenceEquals(bindings, _gpStorageBuffers) ? Engine.FrontendStats.Ev.StorageSync : Engine.FrontendStats.Ev.UniformSync);
+                     }
+ 
+-                    _channel.MemoryManager.Physical.BufferCache.SynchronizeBufferRange(bounds.Range);
++                    _channel.MemoryManager.Physical.BufferCache.SynchronizeBufferRange(bounds.Range, ref buffers.Sync[binding.Slot]);
+                 }
+             }
+         }
+diff --git a/src/Ryujinx.Graphics.Gpu/Engine/GpuFrontend.cs b/src/Ryujinx.Graphics.Gpu/Engine/GpuFrontend.cs
+index 17eca970e..445dc53ff 100644
+--- a/src/Ryujinx.Graphics.Gpu/Engine/GpuFrontend.cs
++++ b/src/Ryujinx.Graphics.Gpu/Engine/GpuFrontend.cs
+@@ -34,6 +34,11 @@ namespace Ryujinx.Graphics.Gpu.Engine
+             return optimized;
+         }
+ 
++        private static readonly AbPhase.Switch _syncMemo = new("BOTWPC_FE_SYNC_MEMO");
++
++        /// <summary>Per-binding memo of the last buffer synchronization (BufferCache.SyncMemo).</summary>
++        public static bool SyncMemo => Optimized && _syncMemo.IsOn;
++
+         private static readonly AbPhase.Switch _fastDispatch = new("BOTWPC_FE_FAST_DISPATCH");
+ 
+         /// <summary>Direct dispatch of 3D register writes and macro calls from the command stream (GPFifoProcessor).</summary>
+@@ -54,6 +59,7 @@ namespace Ryujinx.Graphics.Gpu.Engine
+ 
+         public enum Check
+         {
++            SyncMemo,
+             FastWrite,
+             Count,
+         }

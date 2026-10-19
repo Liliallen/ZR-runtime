@@ -1,0 +1,55 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 64K of event 'cpu/cycles/Pu'
+# Event count (approx.): 272372929457
+#
+# Overhead  Command          Shared Object                  Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+# ........  ...............  .............................  .............................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+#
+     3.77%  GUI.RenderThrea  libcoreclr.so                  [.] 0x00000000003184e5
+     2.42%  GPU.MainThread   [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Gpu] Ryujinx.Graphics.Gpu.Engine.GPFifo.GPFifoProcessor::Send(uint64,int32,int32,int32,bool)[OptimizedTier1]
+     1.96%  GPU.MainThread   [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Gpu] Ryujinx.Graphics.Gpu.Memory.BufferManager::CommitGraphicsBindings(bool)[Optimized]
+     1.85%  GUI.RenderThrea  [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.GAL] Ryujinx.Graphics.GAL.Multithreading.ThreadedRenderer::RenderLoop()[OptimizedTier1OSR]
+     1.71%  HLE.GuestThread  libcoreclr.so                  [.] 0x00000000003184e5
+     1.46%  GPU.MainThread   [JIT] tid 374611               [.] instance valuetype [Ryujinx.Graphics.GAL]Ryujinx.Graphics.GAL.BufferRange [Ryujinx.Graphics.Gpu] Ryujinx.Graphics.Gpu.Memory.BufferCache::GetBufferRange(valuetype [Ryujinx.Memory]Ryujinx.Memory.Range.MultiRange,valuetype Ryujinx.Graphics.Gpu.Memory.BufferStage,bool)[OptimizedTier1]
+     1.35%  GPU.MainThread   [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Gpu] Ryujinx.Graphics.Gpu.Memory.BufferCache::CreateBufferAligned(uint64,uint64,valuetype Ryujinx.Graphics.Gpu.Memory.BufferStage)[OptimizedTier1]
+     1.25%  GPU.MainThread   [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Gpu] Ryujinx.Graphics.Gpu.Engine.GPFifo.GPFifoProcessor::Process(uint64,valuetype [System.Runtime]System.ReadOnlySpan`1<int32>)[OptimizedTier1]
+     1.02%  GUI.RenderThrea  [JIT] tid 374611               [.] instance bool [Ryujinx.Graphics.Vulkan] Ryujinx.Graphics.Vulkan.PipelineBase::RecreateGraphicsPipelineIfNeeded()[OptimizedTier1]
+     0.88%  GPU.MainThread   [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Gpu] Ryujinx.Graphics.Gpu.Engine.Threed.StateUpdater::UpdateVertexBufferState()[OptimizedTier1]
+     0.76%  GPU.MainThread   [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Gpu] Ryujinx.Graphics.Gpu.Memory.BufferCache::SynchronizeBufferRange(valuetype [Ryujinx.Memory]Ryujinx.Memory.Range.MultiRange)[OptimizedTier1]
+     0.61%  GPU.MainThread   [JIT] tid 374611               [.] instance bool [Ryujinx.Graphics.Gpu] Ryujinx.Graphics.Gpu.Image.TextureBindingsManager::CommitTextureBindings(class Ryujinx.Graphics.Gpu.Image.TexturePool,class Ryujinx.Graphics.Gpu.Image.SamplerPool,valuetype [Ryujinx.Graphics.Shader]Ryujinx.Graphics.Shader.ShaderStage,int32,bool,class Ryujinx.Graphics.Gpu.Shader.ShaderSpecializationState)[OptimizedTier1]
+     0.59%  GPU.MainThread   [JIT] tid 374611               [.] object& [System.Private.CoreLib] System.Runtime.CompilerServices.CastHelpers::LdelemaRef(object[],native int,void*)[OptimizedTier1]
+     0.48%  GPU.MainThread   [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.GAL] Ryujinx.Graphics.GAL.Multithreading.ThreadedRenderer::QueueCommand()[OptimizedTier1]
+     0.47%  GPU.MainThread   [JIT] tid 374611               [.] instance class Ryujinx.Memory.Range.RangeItem`1<!0> [Ryujinx.Memory] Ryujinx.Memory.Range.NonOverlappingRangeList`1[System.__Canon]::FindOverlap(uint64,uint64)[OptimizedTier1]
+     0.46%  GUI.RenderThrea  [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Vulkan] Ryujinx.Graphics.Vulkan.PipelineBase::SetVertexBuffers(valuetype [System.Runtime]System.ReadOnlySpan`1<valuetype [Ryujinx.Graphics.GAL]Ryujinx.Graphics.GAL.VertexBufferDescriptor>)[OptimizedTier1]
+     0.41%  GPU.MainThread   [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Gpu] Ryujinx.Graphics.Gpu.Engine.GPFifo.GPFifoDevice::DispatchCalls()[OptimizedTier1]
+     0.40%  GPU.MainThread   [vdso]                         [.] __vdso_clock_gettime
+     0.40%  GUI.RenderThrea  [JIT] tid 374611               [.] instance bool [System.Private.CoreLib] System.Threading.ManualResetEventSlim::Wait(int32,valuetype System.Threading.CancellationToken)[OptimizedTier1]
+     0.38%  GUI.RenderThrea  [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Vulkan] Ryujinx.Graphics.Vulkan.PipelineBase::SetVertexAttribs(valuetype [System.Runtime]System.ReadOnlySpan`1<valuetype [Ryujinx.Graphics.GAL]Ryujinx.Graphics.GAL.VertexAttribDescriptor>)[Optimized]
+     0.36%  GPU.MainThread   [JIT] tid 374611               [.] instance class Ryujinx.Graphics.Gpu.Shader.CachedShaderProgram [Ryujinx.Graphics.Gpu] Ryujinx.Graphics.Gpu.Shader.ShaderCache::GetGraphicsShader(valuetype Ryujinx.Graphics.Gpu.Engine.Threed.ThreedClassState&,valuetype [Ryujinx.Graphics.GAL]Ryujinx.Graphics.GAL.ProgramPipelineState&,class Ryujinx.Graphics.Gpu.GpuChannel,int32,valuetype Ryujinx.Graphics.Gpu.Shader.GpuChannelPoolState&,valuetype Ryujinx.Graphics.Gpu.Shader.GpuChannelGraphicsState&,valuetype Ryujinx.Graphics.Gpu.Shader.ShaderAddresses)[OptimizedTier1]
+     0.35%  GPU.MainThread   [JIT] tid 374611               [.] instance void [Ryujinx.Memory] Ryujinx.Memory.Tracking.MultiRegionHandle::QueryModified(uint64,uint64,class [System.Runtime]System.Action`2<uint64,uint64>,int32)[OptimizedTier1]
+     0.34%  GUI.RenderThrea  [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Vulkan] Ryujinx.Graphics.Vulkan.DescriptorSetUpdater::SetUniformBuffers(valuetype [Silk.NET.Vulkan]Silk.NET.Vulkan.CommandBuffer,valuetype [System.Runtime]System.ReadOnlySpan`1<valuetype [Ryujinx.Graphics.GAL]Ryujinx.Graphics.GAL.BufferAssignment>)[OptimizedTier1]
+     0.33%  GUI.RenderThrea  [JIT] tid 374611               [.] instance valuetype [System.Runtime]System.Span`1<valuetype Ryujinx.Graphics.GAL.VertexBufferDescriptor> [Ryujinx.Graphics.GAL] Ryujinx.Graphics.GAL.Multithreading.BufferMap::MapBufferRanges(valuetype [System.Runtime]System.Span`1<valuetype Ryujinx.Graphics.GAL.VertexBufferDescriptor>)[OptimizedTier1]
+     0.32%  GUI.RenderThrea  [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Vulkan] Ryujinx.Graphics.Vulkan.BarrierBatch::Flush(valuetype Ryujinx.Graphics.Vulkan.CommandBufferScoped,class Ryujinx.Graphics.Vulkan.ShaderCollection,bool,bool,class Ryujinx.Graphics.Vulkan.RenderPassHolder,class [System.Runtime]System.Action)[OptimizedTier1]
+     0.32%  GUI.RenderThrea  libcoreclr.so                  [.] 0x00000000003184e2
+     0.32%  GPU.MainThread   [JIT] tid 374611               [.] instance bool [System.Private.CoreLib] System.Threading.ReaderWriterLockSlim::TryEnterWriteLockCore(valuetype System.Threading.ReaderWriterLockSlim/TimeoutTracker)[OptimizedTier1]
+     0.30%  GUI.RenderThrea  [JIT] tid 374611               [.] void [System.Private.CoreLib] System.Runtime.CompilerServices.CastHelpers::StelemRef_Helper(object&,void*,object)[OptimizedTier1]
+     0.29%  GPU.MainThread   [JIT] tid 374611               [.] instance void [System.Private.CoreLib] System.Threading.ManualResetEventSlim::Set(bool)[OptimizedTier1]
+     0.28%  GUI.RenderThrea  [vdso]                         [.] __vdso_clock_gettime
+     0.28%  GUI.RenderThrea  [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Vulkan] Ryujinx.Graphics.Vulkan.DescriptorSetUpdater::UpdateAndBind(valuetype Ryujinx.Graphics.Vulkan.CommandBufferScoped,class Ryujinx.Graphics.Vulkan.ShaderCollection,int32,valuetype [Silk.NET.Vulkan]Silk.NET.Vulkan.PipelineBindPoint)[OptimizedTier1]
+     0.27%  GUI.RenderThrea  [JIT] tid 374611               [.] instance valuetype [System.Runtime]System.Span`1<valuetype Ryujinx.Graphics.GAL.BufferAssignment> [Ryujinx.Graphics.GAL] Ryujinx.Graphics.GAL.Multithreading.BufferMap::MapBufferRanges(valuetype [System.Runtime]System.Span`1<valuetype Ryujinx.Graphics.GAL.BufferAssignment>)[OptimizedTier1]
+     0.27%  GPU.MainThread   [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Gpu] Ryujinx.Graphics.Gpu.Engine.Threed.DrawManager::Draw(class Ryujinx.Graphics.Gpu.Engine.Threed.ThreedClass,valuetype [Ryujinx.Graphics.GAL]Ryujinx.Graphics.GAL.PrimitiveTopology,int32,int32,int32,int32,int32,bool)[OptimizedTier1]
+     0.26%  GPU.MainThread   [JIT] tid 374611               [.] bool [System.Private.CoreLib] System.SpanHelpers::SequenceEqual(uint8&,uint8&,native uint)[OptimizedTier1]
+     0.24%  HLE.GuestThread  libcoreclr.so                  [.] 0x00000000003184e2
+     0.22%  GUI.RenderThrea  [JIT] tid 374611               [.] instance bool [Ryujinx.Graphics.Vulkan] Ryujinx.Graphics.Vulkan.IdList`1[System.__Canon]::TryGetValue(int32,!0&)[OptimizedTier1]
+     0.21%  GUI.RenderThrea  [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Vulkan] Ryujinx.Graphics.Vulkan.CommandBufferPool::WaitAndDecrementRef(int32,bool)[OptimizedTier1]
+     0.21%  GPU.MainThread   [JIT] tid 374611               [.] instance void [Ryujinx.Graphics.Gpu] Ryujinx.Graphics.Gpu.Memory.BufferManager::CommitBufferTextureBindings(class Ryujinx.Graphics.Gpu.Memory.BufferCache)[OptimizedTier1]
+     0.20%  HLE.GuestThread  libcoreclr.so                  [.] 0x00000000002c348d
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

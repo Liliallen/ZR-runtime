@@ -1,0 +1,29 @@
+# Progressed save (outside the Shrine of Resurrection, Great Plateau): load, then a fixed outdoor sequence.
+# Walk to the tree ahead and hit it with the equipped weapon (Tree Branch) 15 times: vanilla breaks it, a
+# durability mod keeps it. Logical Switch buttons.
+# start_s dur buttons [lx ly rx ry]
+25  0.2 A
+28  0.2 A
+31  0.2 A
+34  0.2 A
+37  0.2 A
+40  0.2 A
+43  0.2 A
+46  0.2 A
+60  2.4 -  7000 32767 0 0
+62.8 0.3 -  14000 0 0 0
+63.6 0.15 Y
+64.8 0.15 Y
+66.0 0.15 Y
+67.2 0.15 Y
+68.4 0.15 Y
+69.6 0.15 Y
+70.8 0.15 Y
+72.0 0.15 Y
+73.2 0.15 Y
+74.4 0.15 Y
+75.6 0.15 Y
+76.8 0.15 Y
+78.0 0.15 Y
+79.2 0.15 Y
+80.4 0.15 Y

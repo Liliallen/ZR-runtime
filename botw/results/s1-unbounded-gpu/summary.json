@@ -1,0 +1,16 @@
+{
+  "label": "s1-unbounded-gpu",
+  "frames": 2540,
+  "duration_s": 48.092,
+  "avg_fps": 52.82,
+  "median_fps": 54.38,
+  "one_pct_low_fps": 26.22,
+  "p99_ms": 27.277,
+  "max_ms": 159.883,
+  "stutters_2x_median": 3,
+  "fifo_pct_mean": 64.56,
+  "gpu_util_pct_mean": 20.6,
+  "gpu_clock_mhz_mean": 2445,
+  "vram_mib_peak": 1631.0,
+  "gpu_power_w_mean": 66.0
+}

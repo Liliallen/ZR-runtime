@@ -1,0 +1,170 @@
+diff --git a/src/Ryujinx.Graphics.Gpu/Memory/BufferManager.cs b/src/Ryujinx.Graphics.Gpu/Memory/BufferManager.cs
+index 3e1417f26..8546650fe 100644
+--- a/src/Ryujinx.Graphics.Gpu/Memory/BufferManager.cs
++++ b/src/Ryujinx.Graphics.Gpu/Memory/BufferManager.cs
+@@ -107,6 +107,18 @@ namespace Ryujinx.Graphics.Gpu.Memory
+         private bool _gpStorageBuffersDirty;
+         private bool _gpUniformBuffersDirty;
+ 
++        // BOTW-PC: per-slot dirty state for graphics uniform buffers. Upstream marks all graphics uniform bindings of all
++        // stages dirty when any one of them changes, and again on every shader change, so the next draw resolves every
++        // bound uniform buffer again (lookup, sync, range) and re-sends all of them to the backend. BotW changes one or
++        // two uniform slots between most draws and switches between shaders with the same uniform layout. Now a changed
++        // slot only marks itself, and a shader with the same (binding, slot) layout per stage keeps the bindings; the
++        // commit re-resolves and sends the marked slots and only synchronizes the others, exactly as their non-dirty path
++        // already did. The backend keeps uniform bindings across program changes (DescriptorSetUpdater refs per binding).
++        // _gpUniformBuffersDirty still forces the full rebind (layout change, Rebind). BOTWPC_UBO_SLOT_DIRTY=0 disables.
++        private static readonly Ryujinx.Common.BotwPc.AbPhase.Switch _uboSlotDirty = new("BOTWPC_UBO_SLOT_DIRTY");
++        private readonly uint[] _gpUniformDirtySlots = new uint[Constants.ShaderStages];
++        private bool _gpUniformAnySlotDirty;
++
+         private bool _indexBufferDirty;
+         private bool _vertexBuffersDirty;
+         private uint _vertexBuffersEnableMask;
+@@ -452,7 +464,15 @@ namespace Ryujinx.Graphics.Gpu.Memory
+ 
+             if (BindingChanged(!buffers.Buffers[index].Range.Equals(range)))
+             {
+-                _gpUniformBuffersDirty = true;
++                if (_uboSlotDirty.IsOn)
++                {
++                    _gpUniformDirtySlots[stage] |= 1u << index;
++                    _gpUniformAnySlotDirty = true;
++                }
++                else
++                {
++                    _gpUniformBuffersDirty = true;
++                }
+             }
+ 
+             buffers.SetBounds(index, range);
+@@ -497,14 +517,54 @@ namespace Ryujinx.Graphics.Gpu.Memory
+         /// <param name="bindings">Bindings for the active shader</param>
+         public void SetGraphicsBufferBindings(CachedShaderBindings bindings)
+         {
++            bool uniformLayoutChanged = false;
++
+             for (int i = 0; i < Constants.ShaderStages; i++)
+             {
++                BufferDescriptor[] uniformBindings = bindings.ConstantBufferBindings[i];
++
++                uniformLayoutChanged = uniformLayoutChanged || !SameUniformLayout(_gpUniformBuffers[i], uniformBindings);
++
+                 _gpStorageBuffers[i].SetBindings(bindings.StorageBufferBindings[i]);
+-                _gpUniformBuffers[i].SetBindings(bindings.ConstantBufferBindings[i]);
++                _gpUniformBuffers[i].SetBindings(uniformBindings);
+             }
+ 
+             _gpStorageBuffersDirty = true;
+-            _gpUniformBuffersDirty = true;
++
++            if (uniformLayoutChanged || !_uboSlotDirty.IsOn)
++            {
++                _gpUniformBuffersDirty = true;
++            }
++        }
++
++        /// <summary>
++        /// Checks if a stage's new uniform buffer bindings use the same (binding, slot) pairs as the current ones.
++        /// </summary>
++        private static bool SameUniformLayout(BuffersPerStage buffers, BufferDescriptor[] descriptors)
++        {
++            int count = descriptors?.Length ?? 0;
++
++            if (count != buffers.Count)
++            {
++                return false;
++            }
++
++            if (count == 0 || ReferenceEquals(descriptors, buffers.Bindings))
++            {
++                return true;
++            }
++
++            BufferDescriptor[] current = buffers.Bindings;
++
++            for (int i = 0; i < count; i++)
++            {
++                if (current[i].Binding != descriptors[i].Binding || current[i].Slot != descriptors[i].Slot)
++                {
++                    return false;
++                }
++            }
++
++            return true;
+         }
+ 
+         /// <summary>
+@@ -856,8 +916,20 @@ namespace Ryujinx.Graphics.Gpu.Memory
+             {
+                 _gpUniformBuffersDirty = false;
+ 
++                if (_gpUniformAnySlotDirty)
++                {
++                    _gpUniformAnySlotDirty = false;
++                    Array.Clear(_gpUniformDirtySlots);
++                }
++
+                 BindBuffers(bufferCache, _gpUniformBuffers, isStorage: false);
+             }
++            else if (_gpUniformAnySlotDirty)
++            {
++                _gpUniformAnySlotDirty = false;
++
++                BindDirtyUniformSlots(bufferCache);
++            }
+             else
+             {
+                 UpdateBuffers(_gpUniformBuffers);
+@@ -912,6 +984,51 @@ namespace Ryujinx.Graphics.Gpu.Memory
+             }
+         }
+ 
++        /// <summary>
++        /// BOTW-PC: binds the graphics uniform buffers of the slots marked in <see cref="_gpUniformDirtySlots"/> and
++        /// synchronizes the others (see the comment at <see cref="_uboSlotDirty"/>).
++        /// </summary>
++        private void BindDirtyUniformSlots(BufferCache bufferCache)
++        {
++            int rangesCount = 0;
++
++            Span<BufferAssignment> ranges = _ranges;
++
++            for (ShaderStage stage = ShaderStage.Vertex; stage <= ShaderStage.Fragment; stage++)
++            {
++                ref BuffersPerStage buffers = ref _gpUniformBuffers[(int)stage - 1];
++                ref uint dirtySlots = ref _gpUniformDirtySlots[(int)stage - 1];
++                BufferStage bufferStage = BufferStageUtils.FromShaderStage(stage);
++
++                for (int index = 0; index < buffers.Count; index++)
++                {
++                    ref BufferDescriptor bindingInfo = ref buffers.Bindings[index];
++
++                    BufferBounds bounds = buffers.Buffers[bindingInfo.Slot];
++
++                    if ((dirtySlots & (1u << bindingInfo.Slot)) != 0)
++                    {
++                        // Like the full rebind, an unmapped slot is not sent.
++                        if (!bounds.IsUnmapped)
++                        {
++                            ranges[rangesCount++] = new BufferAssignment(bindingInfo.Binding, bufferCache.GetBufferRange(bounds.Range, bufferStage));
++                        }
++                    }
++                    else if (!bounds.IsUnmapped)
++                    {
++                        bufferCache.SynchronizeBufferRange(bounds.Range);
++                    }
++                }
++
++                dirtySlots = 0;
++            }
++
++            if (rangesCount != 0)
++            {
++                SetHostBuffers(ranges, rangesCount, isStorage: false);
++            }
++        }
++
+         /// <summary>
+         /// Bind respective buffer bindings on the host API.
+         /// </summary>

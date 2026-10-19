@@ -1,0 +1,312 @@
+diff --git a/src/Ryujinx.Common/BotwPc/GpuCounters.cs b/src/Ryujinx.Common/BotwPc/GpuCounters.cs
+index ee1c8c32a..0d66fd8c6 100644
+--- a/src/Ryujinx.Common/BotwPc/GpuCounters.cs
++++ b/src/Ryujinx.Common/BotwPc/GpuCounters.cs
+@@ -84,6 +84,7 @@ namespace Ryujinx.Common.BotwPc
+             TrackFaults,
+             Reprotects,
+             ReprotectTicks,
++            ReprotectsBatched,
+ 
+             // Render (backend) thread.
+             RenderIdles,
+diff --git a/src/Ryujinx.Memory/Tracking/MemoryTracking.cs b/src/Ryujinx.Memory/Tracking/MemoryTracking.cs
+index 1517f4c83..3524044af 100644
+--- a/src/Ryujinx.Memory/Tracking/MemoryTracking.cs
++++ b/src/Ryujinx.Memory/Tracking/MemoryTracking.cs
+@@ -1,6 +1,7 @@
+ using Ryujinx.Memory.Range;
+ using System;
+ using System.Collections.Generic;
++using System.Threading;
+ 
+ namespace Ryujinx.Memory.Tracking
+ {
+@@ -365,6 +366,27 @@ namespace Ryujinx.Memory.Tracking
+         /// <param name="guest">True if the protection is for guest access, false otherwise</param>
+         internal void ProtectVirtualRegion(VirtualRegion region, MemoryPermission permission, bool guest)
+         {
++            if (_batchThread == Environment.CurrentManagedThreadId)
++            {
++                // Inside a protection batch (always under TrackingLock): merge with the previous change if contiguous.
++                if (_batchCount != 0 && _batchAddress + _batchSize == region.Address && _batchPermission == permission && _batchGuest == guest)
++                {
++                    _batchSize += region.Size;
++                }
++                else
++                {
++                    FlushBatchedProtection();
++                    _batchAddress = region.Address;
++                    _batchSize = region.Size;
++                    _batchPermission = permission;
++                    _batchGuest = guest;
++                }
++
++                _batchCount++;
++
++                return;
++            }
++
+             if (Ryujinx.Common.BotwPc.GpuCounters.Detailed)
+             {
+                 long start = System.Diagnostics.Stopwatch.GetTimestamp();
+@@ -376,6 +398,70 @@ namespace Ryujinx.Memory.Tracking
+             _memoryManager.TrackingReprotect(region.Address, region.Size, permission, guest);
+         }
+ 
++        // BOTW-PC: batched page protection. Re-arming write tracking for a run of dirty pages changed the protection one
++        // 4 KiB page per OS call (VirtualProtect/mprotect). Between BeginProtectionBatch and EndProtectionBatch the
++        // calling thread holds TrackingLock, so no other thread can change any region's protection in between (every
++        // path that does takes the lock), and the protection changes of contiguous regions with the same permission are
++        // applied as one call when the batch ends or a non-contiguous change starts. Callers end the batch before they
++        // read the guest data the reprotected pages hold, so a write in the meantime is either in the data they read or
++        // faults afterwards, as without batching. Same idea as Eden's coalescing of tracked page ranges before
++        // changing their protection (#3288), re-implemented. BOTWPC_BATCH_REPROTECT=0 disables it.
++        public static readonly Ryujinx.Common.BotwPc.AbPhase.Switch BatchReprotect = new("BOTWPC_BATCH_REPROTECT");
++
++        private int _batchThread = -1;
++        private int _batchCount;
++        private ulong _batchAddress;
++        private ulong _batchSize;
++        private MemoryPermission _batchPermission;
++        private bool _batchGuest;
++
++        /// <summary>
++        /// Starts collecting protection changes of this thread (takes TrackingLock until <see cref="EndProtectionBatch"/>).
++        /// </summary>
++        internal void BeginProtectionBatch()
++        {
++            Monitor.Enter(TrackingLock);
++            _batchThread = Environment.CurrentManagedThreadId;
++        }
++
++        /// <summary>
++        /// Applies the collected protection changes and releases TrackingLock.
++        /// </summary>
++        internal void EndProtectionBatch()
++        {
++            try
++            {
++                FlushBatchedProtection();
++            }
++            finally
++            {
++                _batchThread = -1;
++                Monitor.Exit(TrackingLock);
++            }
++        }
++
++        private void FlushBatchedProtection()
++        {
++            if (_batchCount == 0)
++            {
++                return;
++            }
++
++            if (Ryujinx.Common.BotwPc.GpuCounters.Detailed)
++            {
++                long start = System.Diagnostics.Stopwatch.GetTimestamp();
++                _memoryManager.TrackingReprotect(_batchAddress, _batchSize, _batchPermission, _batchGuest);
++                Ryujinx.Common.BotwPc.GpuCounters.AddElapsed(Ryujinx.Common.BotwPc.GpuCounters.Id.Reprotects, Ryujinx.Common.BotwPc.GpuCounters.Id.ReprotectTicks, start);
++                Ryujinx.Common.BotwPc.GpuCounters.Add(Ryujinx.Common.BotwPc.GpuCounters.Id.ReprotectsBatched, _batchCount);
++            }
++            else
++            {
++                _memoryManager.TrackingReprotect(_batchAddress, _batchSize, _batchPermission, _batchGuest);
++            }
++
++            _batchCount = 0;
++        }
++
+         /// <summary>
+         /// Returns the number of virtual regions currently being tracked.
+         /// Useful for tests and metrics.
+diff --git a/src/Ryujinx.Memory/Tracking/MultiRegionHandle.cs b/src/Ryujinx.Memory/Tracking/MultiRegionHandle.cs
+index 20d2a07ef..f9b27135f 100644
+--- a/src/Ryujinx.Memory/Tracking/MultiRegionHandle.cs
++++ b/src/Ryujinx.Memory/Tracking/MultiRegionHandle.cs
+@@ -18,6 +18,7 @@ namespace Ryujinx.Memory.Tracking
+         /// A list of region handles for each granularity sized chunk of the whole region.
+         /// </summary>
+         private readonly RegionHandle[] _handles;
++        private readonly MemoryTracking _tracking;
+         private readonly ulong Address;
+         private readonly ulong Granularity;
+         private readonly ulong Size;
+@@ -41,6 +42,7 @@ namespace Ryujinx.Memory.Tracking
+             RegionFlags flags)
+         {
+             _handles = new RegionHandle[(size + granularity - 1) / granularity];
++            _tracking = tracking;
+             Granularity = granularity;
+ 
+             _dirtyBitmap = new ConcurrentBitmap(_handles.Length, true);
+@@ -159,7 +161,7 @@ namespace Ryujinx.Memory.Tracking
+         }
+ 
+         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+-        private void ParseDirtyBits(long dirtyBits, ref int baseBit, ref int prevHandle, ref ulong rgStart, ref ulong rgSize, Action<ulong, ulong> modifiedAction)
++        private void ParseDirtyBits(long dirtyBits, ref int baseBit, ref int prevHandle, ref ulong rgStart, ref ulong rgSize, Action<ulong, ulong> modifiedAction, ref bool batch)
+         {
+             while (dirtyBits != 0)
+             {
+@@ -176,6 +178,7 @@ namespace Ryujinx.Memory.Tracking
+                     // Submit handles scanned until the gap as dirty
+                     if (rgSize != 0)
+                     {
++                        EndBatch(ref batch);
+                         modifiedAction(rgStart, rgSize);
+                         rgSize = 0;
+                     }
+@@ -186,6 +189,7 @@ namespace Ryujinx.Memory.Tracking
+                 if (handle.Dirty)
+                 {
+                     rgSize += handle.RealSize;
++                    BeginBatch(ref batch);
+                     handle.Reprotect();
+                 }
+ 
+@@ -232,22 +236,31 @@ namespace Ryujinx.Memory.Tracking
+             int baseBit = startIndex << ConcurrentBitmap.IntShift;
+             int prevHandle = startHandle - 1;
+ 
+-            if (startIndex == endIndex)
+-            {
+-                ParseDirtyBits(startValue & startMask & endMask, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+-            }
+-            else
+-            {
+-                ParseDirtyBits(startValue & startMask, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
++            bool batch = false;
+ 
+-                for (int i = startIndex + 1; i < endIndex; i++)
++            try
++            {
++                if (startIndex == endIndex)
+                 {
+-                    ParseDirtyBits(Volatile.Read(ref masks[i]), ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
++                    ParseDirtyBits(startValue & startMask & endMask, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction, ref batch);
+                 }
++                else
++                {
++                    ParseDirtyBits(startValue & startMask, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction, ref batch);
+ 
+-                long endValue = Volatile.Read(ref masks[endIndex]);
++                    for (int i = startIndex + 1; i < endIndex; i++)
++                    {
++                        ParseDirtyBits(Volatile.Read(ref masks[i]), ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction, ref batch);
++                    }
++
++                    long endValue = Volatile.Read(ref masks[endIndex]);
+ 
+-                ParseDirtyBits(endValue & endMask, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
++                    ParseDirtyBits(endValue & endMask, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction, ref batch);
++                }
++            }
++            finally
++            {
++                EndBatch(ref batch);
+             }
+ 
+             if (rgSize != 0)
+@@ -257,7 +270,7 @@ namespace Ryujinx.Memory.Tracking
+         }
+ 
+         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+-        private void ParseDirtyBits(long dirtyBits, long mask, int index, long[] seqMasks, long[] checkMasks, ref int baseBit, ref int prevHandle, ref ulong rgStart, ref ulong rgSize, Action<ulong, ulong> modifiedAction)
++        private void ParseDirtyBits(long dirtyBits, long mask, int index, long[] seqMasks, long[] checkMasks, ref int baseBit, ref int prevHandle, ref ulong rgStart, ref ulong rgSize, Action<ulong, ulong> modifiedAction, ref bool batch)
+         {
+             long seqMask = mask & ~seqMasks[index];
+             long checkMask = (~dirtyBits) & seqMask;
+@@ -279,6 +292,7 @@ namespace Ryujinx.Memory.Tracking
+                     // Submit handles scanned until the gap as dirty
+                     if (rgSize != 0)
+                     {
++                        EndBatch(ref batch);
+                         modifiedAction(rgStart, rgSize);
+                         rgSize = 0;
+                     }
+@@ -287,6 +301,7 @@ namespace Ryujinx.Memory.Tracking
+                 }
+ 
+                 rgSize += handle.RealSize;
++                BeginBatch(ref batch);
+                 handle.Reprotect(false, (checkMasks[index] & bitValue) == 0);
+ 
+                 checkMasks[index] &= ~bitValue;
+@@ -361,22 +376,31 @@ namespace Ryujinx.Memory.Tracking
+             int baseBit = startIndex << ConcurrentBitmap.IntShift;
+             int prevHandle = startHandle - 1;
+ 
+-            if (startIndex == endIndex)
+-            {
+-                ParseDirtyBits(startValue, startMask & endMask, startIndex, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+-            }
+-            else
+-            {
+-                ParseDirtyBits(startValue, startMask, startIndex, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
++            bool batch = false;
+ 
+-                for (int i = startIndex + 1; i < endIndex; i++)
++            try
++            {
++                if (startIndex == endIndex)
+                 {
+-                    ParseDirtyBits(Volatile.Read(ref masks[i]), -1L, i, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
++                    ParseDirtyBits(startValue, startMask & endMask, startIndex, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction, ref batch);
+                 }
++                else
++                {
++                    ParseDirtyBits(startValue, startMask, startIndex, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction, ref batch);
++
++                    for (int i = startIndex + 1; i < endIndex; i++)
++                    {
++                        ParseDirtyBits(Volatile.Read(ref masks[i]), -1L, i, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction, ref batch);
++                    }
+ 
+-                long endValue = Volatile.Read(ref masks[endIndex]);
++                    long endValue = Volatile.Read(ref masks[endIndex]);
+ 
+-                ParseDirtyBits(endValue, endMask, endIndex, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
++                    ParseDirtyBits(endValue, endMask, endIndex, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction, ref batch);
++                }
++            }
++            finally
++            {
++                EndBatch(ref batch);
+             }
+ 
+             if (rgSize != 0)
+@@ -385,6 +409,32 @@ namespace Ryujinx.Memory.Tracking
+             }
+         }
+ 
++        /// <summary>
++        /// BOTW-PC: starts a protection batch for a run of dirty handles (see MemoryTracking.BeginProtectionBatch).
++        /// </summary>
++        [MethodImpl(MethodImplOptions.AggressiveInlining)]
++        private void BeginBatch(ref bool batch)
++        {
++            if (!batch && MemoryTracking.BatchReprotect.IsOn)
++            {
++                _tracking.BeginProtectionBatch();
++                batch = true;
++            }
++        }
++
++        /// <summary>
++        /// BOTW-PC: applies the batched protection changes; must run before the dirty data is read.
++        /// </summary>
++        [MethodImpl(MethodImplOptions.AggressiveInlining)]
++        private void EndBatch(ref bool batch)
++        {
++            if (batch)
++            {
++                batch = false;
++                _tracking.EndProtectionBatch();
++            }
++        }
++
+         public void RegisterAction(ulong address, ulong size, RegionSignal action)
+         {
+             int startHandle = (int)((address - Address) / Granularity);

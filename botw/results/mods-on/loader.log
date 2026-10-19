@@ -1,0 +1,14 @@
+00:00:01.409 |I| ModLoader QueryContentsDir: Searching mods for Application 01007EF00011E000 in "/home/[redacted]/Desktop/BOTW/devdata/mods/contents"
+00:00:01.414 |I| ModLoader AddModsFromDirectory: Found enabled mod 'TestA' [R]
+00:00:01.414 |I| ModLoader AddModsFromDirectory: Found enabled mod 'TestB' [R]
+00:00:01.414 |I| ModLoader QueryContentsDir: Searching mods for DLC 01007EF00011F001 in "/home/[redacted]/Desktop/BOTW/devdata/mods/contents"
+00:00:01.414 |I| ModLoader QueryContentsDir: Searching mods for DLC 01007EF00011F002 in "/home/[redacted]/Desktop/BOTW/devdata/mods/contents"
+00:00:01.414 |I| ModLoader QueryContentsDir: Searching mods for Application 01007EF00011E000 in "/home/[redacted]/Desktop/BOTW/devdata/sdcard/atmosphere/contents"
+00:00:01.414 |I| ModLoader QueryContentsDir: Searching mods for DLC 01007EF00011F001 in "/home/[redacted]/Desktop/BOTW/devdata/sdcard/atmosphere/contents"
+00:00:01.414 |I| ModLoader QueryContentsDir: Searching mods for DLC 01007EF00011F002 in "/home/[redacted]/Desktop/BOTW/devdata/sdcard/atmosphere/contents"
+00:00:02.756 |I| ModLoader LoadCheats: Build ids found for application 01007EF00011E000:
+00:00:02.760 |I| ModLoader ApplyRomFsMods: Applying RomFS mods for Application 01007EF00011E000
+00:00:02.770 |W| ModLoader ApplyRomFsMods:     Skipped duplicate file '/BotwPcTest/probe.txt' from 'TestA'
+00:00:02.770 |I| ModLoader ApplyRomFsMods: Replaced 2 file(s) over 2 mod(s). Processing base storage...
+00:00:03.054 |I| ModLoader ApplyRomFsMods: Building new RomFS...
+00:00:03.071 |I| ModLoader ApplyRomFsMods: Using modded RomFS

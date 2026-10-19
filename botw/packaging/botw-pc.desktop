@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=BOTW-PC
+Comment=The Legend of Zelda: Breath of the Wild runtime (needs your own game files)
+Exec=botw-pc %f
+Icon=botw-pc
+Terminal=false
+Categories=Game;
+StartupWMClass=Ryujinx

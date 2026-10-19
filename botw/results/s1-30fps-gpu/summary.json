@@ -1,0 +1,16 @@
+{
+  "label": "s1-30fps-gpu",
+  "frames": 1431,
+  "duration_s": 47.834,
+  "avg_fps": 29.92,
+  "median_fps": 30.0,
+  "one_pct_low_fps": 20.7,
+  "p99_ms": 41.66,
+  "max_ms": 50.77,
+  "stutters_2x_median": 0,
+  "fifo_pct_mean": 35.14,
+  "gpu_util_pct_mean": 15.6,
+  "gpu_clock_mhz_mean": 2165,
+  "vram_mib_peak": 1561.0,
+  "gpu_power_w_mean": 59.1
+}

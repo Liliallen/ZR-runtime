@@ -1,0 +1,14 @@
+{
+ "frames": 1892,
+ "seconds": 63.07,
+ "avg_fps": 30.0,
+ "median_fps": 30.01,
+ "one_pct_low_fps": 29.86,
+ "p95_ms": 33.4,
+ "p99_ms": 33.44,
+ "max_ms": 33.7,
+ "cpu_cores_busy": 0.27,
+ "rss_mb_max": 5703,
+ "gpu_util_avg": 15.6,
+ "vram_mb_max": 1448
+}

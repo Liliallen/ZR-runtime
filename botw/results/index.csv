@@ -1,0 +1,36 @@
+label,note,vsync_mode,custom_vsync_interval,backend_threading,frames,median_fps,avg_fps,one_pct_low_fps,p99_ms,stutters_2x_median,game_speed,fifo_pct_mean,gpu_util_pct_mean,vram_mib_peak,gpu_power_w_mean
+s1-baseline,"30 FPS cap; instrumentation only, before optimizations",0,120,Auto,1388,30.0,29.67,19.98,49.998,0,,51.62,,,
+s1-unbounded,VSync unbounded headroom; before fence pool,1,120,Auto,2454,52.66,51.2,30.1,30.388,3,,63.52,,,
+s1-30fps-gpu,30 FPS cap; before fence pool; GPU sampling,0,120,Auto,1431,30.0,29.92,20.7,41.66,0,,35.14,15.6,1561.0,59.1
+s1-unbounded-gpu,VSync unbounded; before fence pool; GPU sampling,1,120,Auto,2540,54.38,52.82,26.22,27.277,3,,64.56,20.6,1631.0,66.0
+s1-30fps-ctr,30 FPS cap; counters; before fence pool,0,120,Auto,1431,30.01,29.82,19.95,48.97,0,,48.89,15.3,1630.0,50.9
+s1-unbounded-ctr,unbounded; counters; before fence pool,1,120,Auto,2549,53.84,52.82,37.78,25.65,0,,65.52,18.2,1609.0,63.2
+s1-unb-fencepool0,A/B: BOTWPC_FENCE_POOL=0 (same binary),1,120,Auto,2488,52.75,51.79,36.3,26.511,0,,65.58,17.8,1598.0,63.3
+s1-unb-fencepool1,A/B: fence pool on (same binary),1,120,Auto,4389,92.3,91.1,67.94,13.912,0,,83.33,32.6,1615.0,68.1
+s1-30fps-fencepool1,30 FPS cap; fence pool on,0,120,Auto,1435,30.0,30.0,27.77,34.517,0,,28.99,15.1,1688.0,47.2
+s1-120-timing,240 Hz custom; fixed-Hz ratio prototype; FIFO present (superseded),2,240,Auto,2864,58.3,58.53,48.68,19.796,0,,77.75,20.3,1715.0,57.3
+s1-hz360,360 Hz custom; fixed-Hz ratio prototype (superseded; shows FIFO cap),2,360,Auto,1971,58.35,58.52,49.1,19.556,0,,78.16,20.2,1806.0,59.3
+s1-hz480,480 Hz custom; fixed-Hz ratio prototype (superseded; shows FIFO cap),2,480,Auto,1958,58.11,58.51,48.51,19.931,0,,78.0,21.1,1828.0,56.4
+s1-120hz-v2,60 FPS mode (120 Hz custom); measured-delta timing,2,120,Auto,2961,60.0,60.0,53.34,16.982,0,1.0,53.54,20.9,2219.0,59.5
+s1-180hz-v2,90 FPS mode (180 Hz custom); measured-delta timing,2,180,Auto,4390,90.15,89.99,70.33,13.718,0,1.0,80.5,32.0,2242.0,68.6
+s1-240hz-v2,120 FPS mode (240 Hz custom); measured-delta timing; FIFO_LATEST_READY,2,240,Auto,4476,93.13,91.82,71.68,13.519,0,1.0,82.47,31.6,1862.0,73.9
+s1-240hz-notiming,240 Hz custom; BOTWPC_TIMING=0 control (measure only),2,240,Auto,4015,92.87,91.71,68.69,13.957,0,3.058,81.19,31.2,1951.0,72.5
+s1-switch-v2,stock Switch VSync; timing module present (no writes),0,120,Auto,1317,30.0,30.0,28.93,33.582,0,1.0,30.17,16.1,1948.0,50.8
+s1-unbounded-timing,unbounded; measured-delta timing,1,120,Auto,4129,95.17,94.14,73.36,13.223,0,1.0,82.46,34.0,1940.0,68.5
+s1-unb-threads,unbounded; per-thread stats,1,120,Auto,3549,93.92,93.05,70.74,13.744,0,1.0,82.38,34.1,2029.0,68.2
+s1-unb-nothreading,unbounded; backend_threading Off,1,120,Off,2697,70.0,69.69,55.52,17.312,0,1.0,94.25,25.4,2053.0,63.8
+motion-30,scripted walk/camera; stock 30 FPS,0,120,Auto,709,30.0,30.0,22.4,36.394,0,0.996,27.18,15.1,2049.0,49.7
+motion-240,scripted walk/camera; 240 Hz + timing,2,240,Auto,2400,104.38,102.85,61.36,12.554,1,0.998,78.5,34.5,2018.0,74.5
+motion-240-notiming,"scripted walk/camera; 240 Hz, BOTWPC_TIMING=0",2,240,Auto,2639,114.98,113.49,59.28,11.976,3,3.588,72.54,31.2,2039.0,70.9
+cs1-30,opening cutscene (new game); stock 30 FPS; 1 s captures,0,240,Auto,2616,30.0,29.93,22.29,33.708,1,0.998,11.98,11.7,2170.0,30.3
+cs1-240,opening cutscene (new game); 240 Hz + timing; 1 s captures,2,240,Auto,9984,118.73,112.4,59.72,13.085,22,0.997,65.79,34.8,2223.0,73.6
+prof-unb-base,uncapped; stage profiling counters (before lookup cache),1,120,Auto,4540,92.95,92.13,71.36,13.614,0,1.0,84.33,34.9,1798.0,72.1
+prof-unb-perf,uncapped; Linux perf profile of all threads (before lookup cache),1,120,Auto,2540,89.95,88.61,67.82,14.104,0,1.0,82.88,35.3,1929.0,76.6
+ab2-lookup0-1,A/B uncapped: BOTWPC_BUFFER_LOOKUP_CACHE=0 (external stutters in this run),1,120,Auto,3100,83.88,81.58,21.89,18.185,19,0.987,80.83,39.0,2264.0,79.6
+ab2-lookup1-1,A/B uncapped: lookup cache on (external stutters in this run),1,120,Auto,3162,87.17,84.6,28.68,19.513,22,0.994,74.78,39.5,2248.0,79.2
+ab2-lookup0-2,A/B uncapped: BOTWPC_BUFFER_LOOKUP_CACHE=0,1,120,Auto,2969,81.55,80.43,56.35,16.106,1,1.0,83.72,38.8,2143.0,79.5
+ab2-lookup1-2,A/B uncapped: lookup cache on,1,120,Auto,3224,86.12,84.87,58.43,15.419,1,1.0,75.71,42.6,2156.0,80.3
+prof-lookup2,uncapped; BOTWPC_PROFILE=1 with lookup cache (hit rate),1,120,Auto,2406,87.22,86.52,63.94,14.819,0,1.0,75.93,42.1,1993.0,79.6
+ctl-auto-1,"uncapped; Xbox Series X|S auto-assigned (real pad, idle)",1,120,Auto,3121,84.11,82.95,57.77,16.009,0,1.0,72.79,41.4,2091.0,80.8
+mods-on,two synthetic test mods installed via --botw-mods; loader log shows priority,1,120,Auto,1342,98.37,96.95,69.58,13.653,0,1.0,74.09,39.0,1673.0,79.1
+mods-safe,safe mode on: no mods loaded; title + DLC info screen reached,0,120,Auto,97,30.0,30.0,27.44,36.444,0,1.0,2.34,15.7,1146.0,47.9

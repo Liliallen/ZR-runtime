@@ -1,0 +1,14 @@
+# Load the save (see continue.input), then open the pause menu (+) to show the button-prompt bar,
+# switch tabs with R, close it with B. Used with periodic screenshots to check in-game prompt glyphs.
+# start_s dur buttons
+25  0.2 A
+28  0.2 A
+31  0.2 A
+34  0.2 A
+37  0.2 A
+40  0.2 A
+43  0.2 A
+46  0.2 A
+75  0.2 Plus
+85  0.2 R
+95  0.2 B

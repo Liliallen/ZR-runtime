@@ -1,0 +1,71 @@
+diff --git a/src/Ryujinx.Graphics.Gpu/Memory/BufferCache.cs b/src/Ryujinx.Graphics.Gpu/Memory/BufferCache.cs
+index d1d0a4ef3..57269326c 100644
+--- a/src/Ryujinx.Graphics.Gpu/Memory/BufferCache.cs
++++ b/src/Ryujinx.Graphics.Gpu/Memory/BufferCache.cs
+@@ -55,6 +55,9 @@ namespace Ryujinx.Graphics.Gpu.Memory
+         private static readonly Ryujinx.Common.BotwPc.AbPhase.Switch _pageTableLookup = new("BOTWPC_BUFFER_PAGE_TABLE");
+         private readonly BufferPageTable _pageTable = new();
+ 
++        // GPU V2 (GpuFrontend.MruBuffer): the last buffer found by FindCachedContaining; cleared when buffers are removed.
++        private Buffer _mruBuffer;
++
+         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+         private static int LookupSlot(ulong address) => (int)((address >> 12) ^ (address >> 22)) & (LookupCacheSize - 1);
+ 
+@@ -577,6 +580,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
+                     
+                     _buffers.RemoveRange(overlaps[0], overlaps[^1]);
+                     Array.Clear(_lookupCache);
++                    _mruBuffer = null;
+ 
+                     foreach (RangeItem<Buffer> removed in overlapsArray)
+                     {
+@@ -678,6 +682,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
+                     
+                     _buffers.RemoveRange(overlaps[0], overlaps[^1]);
+                     Array.Clear(_lookupCache);
++                    _mruBuffer = null;
+ 
+                     foreach (RangeItem<Buffer> removed in overlapsArray)
+                     {
+@@ -1134,6 +1139,28 @@ namespace Ryujinx.Graphics.Gpu.Memory
+         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+         private Buffer FindCachedContaining(ulong address, ulong size)
+         {
++            // GPU V2: the buffer that matched last. Cached buffers never overlap, so a buffer of the cache that fully
++            // contains the range is the one the page table would return; it is forgotten whenever buffers are removed.
++            bool mru = Engine.GpuFrontend.MruBuffer;
++
++            if (mru)
++            {
++                Buffer last = _mruBuffer;
++
++                if (last != null && address >= last.Address && address + size <= last.EndAddress)
++                {
++                    if (Engine.FrontendVerify.Enabled)
++                    {
++                        Buffer reference = _pageTable.Get(address);
++
++                        Engine.FrontendVerify.Compare(Engine.FrontendVerify.Check.MruBuffer, reference == last,
++                            () => $"MRU buffer 0x{last.Address:x}+0x{last.Size:x} for 0x{address:x}+0x{size:x}, page table 0x{reference?.Address ?? 0:x}");
++                    }
++
++                    return last;
++                }
++            }
++
+             if (_pageTableLookup.IsOn)
+             {
+                 Buffer buffer = _pageTable.Get(address);
+@@ -1145,6 +1172,11 @@ namespace Ryujinx.Graphics.Gpu.Memory
+                         Ryujinx.Common.BotwPc.GpuCounters.Add(Ryujinx.Common.BotwPc.GpuCounters.Id.BufLookupHits);
+                     }
+ 
++                    if (mru)
++                    {
++                        _mruBuffer = buffer;
++                    }
++
+                     return buffer;
+                 }
+             }

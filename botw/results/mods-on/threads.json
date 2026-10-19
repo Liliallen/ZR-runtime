@@ -1,0 +1,102 @@
+{
+ "merged": [
+  {
+   "thread": "HLE.GuestThread",
+   "cpu_pct": 230.4
+  },
+  {
+   "thread": "GUI.RenderThrea",
+   "cpu_pct": 77.2
+  },
+  {
+   "thread": "GPU.MainThread",
+   "cpu_pct": 72.4
+  },
+  {
+   "thread": "Ryujinx",
+   "cpu_pct": 9.7
+  },
+  {
+   "thread": "HLE.TimeManager",
+   "cpu_pct": 5.1
+  },
+  {
+   "thread": "AudioProcessor.",
+   "cpu_pct": 3.2
+  },
+  {
+   "thread": ".NET TP Worker",
+   "cpu_pct": 3.0
+  },
+  {
+   "thread": "Common.Nanoslee",
+   "cpu_pct": 2.5
+  },
+  {
+   "thread": "AudioRendererMa",
+   "cpu_pct": 2.5
+  },
+  {
+   "thread": "HLE.OsThread.11",
+   "cpu_pct": 1.9
+  },
+  {
+   "thread": "HLE.OsThread.4",
+   "cpu_pct": 1.8
+  },
+  {
+   "thread": "GUI.WindowThrea",
+   "cpu_pct": 1.6
+  }
+ ],
+ "threads": [
+  {
+   "thread": "GUI.RenderThrea#6362",
+   "cpu_pct": 77.2
+  },
+  {
+   "thread": "GPU.MainThread#6380",
+   "cpu_pct": 72.4
+  },
+  {
+   "thread": "HLE.GuestThread#6420",
+   "cpu_pct": 61.9
+  },
+  {
+   "thread": "HLE.GuestThread#6360",
+   "cpu_pct": 60.0
+  },
+  {
+   "thread": "HLE.GuestThread#6421",
+   "cpu_pct": 43.6
+  },
+  {
+   "thread": "HLE.GuestThread#6609",
+   "cpu_pct": 14.4
+  },
+  {
+   "thread": "HLE.GuestThread#6607",
+   "cpu_pct": 12.5
+  },
+  {
+   "thread": "HLE.GuestThread#6469",
+   "cpu_pct": 6.5
+  },
+  {
+   "thread": "HLE.GuestThread#6468",
+   "cpu_pct": 6.4
+  },
+  {
+   "thread": "Ryujinx#6242",
+   "cpu_pct": 5.7
+  },
+  {
+   "thread": "HLE.GuestThread#6467",
+   "cpu_pct": 5.3
+  },
+  {
+   "thread": "HLE.TimeManager#6293",
+   "cpu_pct": 5.1
+  }
+ ]
+}

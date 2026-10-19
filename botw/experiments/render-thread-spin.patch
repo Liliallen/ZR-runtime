@@ -1,0 +1,81 @@
+diff --git a/src/Ryujinx.Graphics.GAL/Multithreading/ThreadedRenderer.cs b/src/Ryujinx.Graphics.GAL/Multithreading/ThreadedRenderer.cs
+index 256787cfe..434f3fcac 100644
+--- a/src/Ryujinx.Graphics.GAL/Multithreading/ThreadedRenderer.cs
++++ b/src/Ryujinx.Graphics.GAL/Multithreading/ThreadedRenderer.cs
+@@ -115,6 +115,30 @@ namespace Ryujinx.Graphics.GAL.Multithreading
+             RenderLoop();
+         }
+ 
++        /// <summary>
++        /// BOTW-PC optimized GPU front end (set by the GPU at start, 0 = off): how long the render thread polls for new
++        /// commands after draining the queue before it blocks on <see cref="_galWorkAvailable"/>. A producer that
++        /// queues a command into an empty queue sets the event; while the render thread is blocked that is a kernel
++        /// call on the GPU command thread (the critical path in BotW), while it is still polling the set is a plain
++        /// memory operation. Only the waiting changes: the commands, their order and the wake-up event are the same.
++        /// </summary>
++        public static long RenderSpinTicks;
++
++        private static readonly Ryujinx.Common.BotwPc.AbPhase.Switch _renderSpin = new("BOTWPC_FE_GAL_SPIN");
++
++        [MethodImpl(MethodImplOptions.NoInlining)]
++        private void SpinForWork()
++        {
++            long until = System.Diagnostics.Stopwatch.GetTimestamp() + RenderSpinTicks;
++
++            while (Volatile.Read(ref _commandCount) == 0 &&
++                Volatile.Read(ref _interruptAction) == null &&
++                System.Diagnostics.Stopwatch.GetTimestamp() < until)
++            {
++                Thread.SpinWait(16);
++            }
++        }
++
+         public void RenderLoop()
+         {
+             // Power through the render queue until the Gpu thread work is done.
+@@ -122,6 +146,12 @@ namespace Ryujinx.Graphics.GAL.Multithreading
+             while (_running)
+             {
+                 long idleStart = Ryujinx.Common.BotwPc.GpuCounters.Detailed ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
++
++                if (RenderSpinTicks != 0 && _renderSpin.IsOn)
++                {
++                    SpinForWork();
++                }
++
+                 _galWorkAvailable.Wait();
+                 if (Ryujinx.Common.BotwPc.GpuCounters.Detailed)
+                 {
+diff --git a/src/Ryujinx.Graphics.Gpu/Engine/GpuFrontend.cs b/src/Ryujinx.Graphics.Gpu/Engine/GpuFrontend.cs
+index 17eca970e..2dd8d55d4 100644
+--- a/src/Ryujinx.Graphics.Gpu/Engine/GpuFrontend.cs
++++ b/src/Ryujinx.Graphics.Gpu/Engine/GpuFrontend.cs
+@@ -34,6 +34,13 @@ namespace Ryujinx.Graphics.Gpu.Engine
+             return optimized;
+         }
+ 
++        /// <summary>
++        /// Render-thread poll time before it blocks waiting for commands (ThreadedRenderer.RenderSpinTicks), in
++        /// microseconds: BOTWPC_FE_GAL_SPIN_US, default 50 in the optimized front end, 0 in legacy.
++        /// </summary>
++        public static int RenderSpinMicroseconds => !Optimized ? 0 :
++            int.TryParse(Environment.GetEnvironmentVariable("BOTWPC_FE_GAL_SPIN_US"), out int us) ? us : 50;
++
+         private static readonly AbPhase.Switch _fastDispatch = new("BOTWPC_FE_FAST_DISPATCH");
+ 
+         /// <summary>Direct dispatch of 3D register writes and macro calls from the command stream (GPFifoProcessor).</summary>
+diff --git a/src/Ryujinx.Graphics.Gpu/GpuContext.cs b/src/Ryujinx.Graphics.Gpu/GpuContext.cs
+index c4abd4bf2..c639e113c 100644
+--- a/src/Ryujinx.Graphics.Gpu/GpuContext.cs
++++ b/src/Ryujinx.Graphics.Gpu/GpuContext.cs
+@@ -125,6 +125,10 @@ namespace Ryujinx.Graphics.Gpu
+         {
+             Renderer = renderer;
+ 
++            // BOTW-PC optimized front end: render-thread polling before it blocks (see ThreadedRenderer.RenderSpinTicks).
++            GAL.Multithreading.ThreadedRenderer.RenderSpinTicks =
++                Engine.GpuFrontend.RenderSpinMicroseconds * System.Diagnostics.Stopwatch.Frequency / 1_000_000;
++
+             GPFifo = new GPFifoDevice(this);
+ 
+             Synchronization = new SynchronizationManager();

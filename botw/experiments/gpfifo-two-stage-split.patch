@@ -1,0 +1,1087 @@
+diff --git a/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoClass.cs b/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoClass.cs
+index cedd824a1..7206e06a7 100644
+--- a/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoClass.cs
++++ b/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoClass.cs
+@@ -247,5 +247,8 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
+         {
+             _macros[index].Execute(_macroCode, state);
+         }
++
++        /// <summary>BOTW-PC (GPFifoSplit): the macro at an index.</summary>
++        public ref Macro MacroAt(int index) => ref _macros[index];
+     }
+ }
+diff --git a/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoDevice.cs b/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoDevice.cs
+index 7d0f026ec..da9ed2926 100644
+--- a/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoDevice.cs
++++ b/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoDevice.cs
+@@ -94,6 +94,9 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
+         private bool _interrupt;
+         private int _flushSkips;
+ 
++        // BOTW-PC: two-stage command processing (null unless BOTWPC_GPFIFO_SPLIT=1).
++        private readonly GPFifoSplit _split;
++
+         /// <summary>
+         /// Creates a new instance of the GPU General Purpose FIFO device.
+         /// </summary>
+@@ -104,6 +107,11 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
+             _ibEnable = true;
+             _context = context;
+             _event = new AutoResetEvent(false);
++
++            if (GPFifoSplit.Enabled)
++            {
++                _split = new GPFifoSplit(this);
++            }
+         }
+ 
+         /// <summary>
+@@ -112,6 +120,44 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
+         public void SignalNewEntries()
+         {
+             _event.Set();
++            _split?.SignalNewEntries();
++        }
++
++        /// <summary>
++        /// BOTW-PC (stage A of GPFifoSplit): takes the next entry and fetches its words. An entry that must see all
++        /// previous work completed (Entry1Sync.Wait) is fetched only after stage B executed everything before it.
++        /// </summary>
++        internal bool TryDequeueForSplit(out GPFifoProcessor processor, out ulong address, out ReadOnlySpan<int> words, GPFifoSplit split)
++        {
++            if (!_ibEnable || !_commandBufferQueue.TryDequeue(out CommandBuffer entry))
++            {
++                processor = null;
++                address = 0;
++                words = default;
++
++                return false;
++            }
++
++            bool flushCommandBuffer = true;
++
++            if (_flushSkips != 0)
++            {
++                _flushSkips--;
++                flushCommandBuffer = false;
++            }
++
++            split.BeforeSyncFetch(entry.Type == CommandBufferType.NoPrefetch && entry.Words == null, flushCommandBuffer);
++
++            processor = entry.Processor;
++            address = entry.EntryAddress;
++            words = entry.Fetch(entry.Processor.MemoryManager, flushCommandBuffer);
++
++            return true;
++        }
++
++        private bool HasWorkForGpuThread()
++        {
++            return _split.HasPackets || (!_split.QueueOwnedByDecode && !_commandBufferQueue.IsEmpty);
+         }
+ 
+         /// <summary>
+@@ -194,6 +240,23 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
+         /// <returns>True if commands were received, false if wait timed out</returns>
+         public bool WaitForCommands()
+         {
++            if (_split != null)
++            {
++                // Between frames: hand the entry queue to stage A if it asked for it.
++                _split.ReleaseQueueIfRequested();
++
++                if (HasWorkForGpuThread())
++                {
++                    return true;
++                }
++
++                _split.BeginConsumerWait();
++                bool work = HasWorkForGpuThread() || (_event.WaitOne(8) && HasWorkForGpuThread());
++                _split.EndConsumerWait();
++
++                return work;
++            }
++
+             return !_commandBufferQueue.IsEmpty || (_event.WaitOne(8) && !_commandBufferQueue.IsEmpty);
+         }
+ 
+@@ -205,6 +268,13 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
+             // Use this opportunity to also dispose any pending channels that were closed.
+             _context.RunDeferredActions();
+ 
++            if (_split != null)
++            {
++                DispatchCallsSplit();
++
++                return;
++            }
++
+             // Process command buffers.
+             while (_ibEnable && !_interrupt && _commandBufferQueue.TryDequeue(out CommandBuffer entry))
+             {
+@@ -232,6 +302,48 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
+             _interrupt = false;
+         }
+ 
++        /// <summary>
++        /// BOTW-PC: stage B of GPFifoSplit: executes stage A's packets; while stage A is off, processes the entry
++        /// queue itself as <see cref="DispatchCalls"/> does, handing it over between entries when stage A asks.
++        /// </summary>
++        private void DispatchCallsSplit()
++        {
++            while (!_interrupt)
++            {
++                if (_split.HasPackets || (_split.Active && _split.WaitForPacketsWhileDecoding()))
++                {
++                    _split.Execute(ref _interrupt);
++                    continue;
++                }
++
++                if (_split.QueueOwnedByDecode || _split.ReleaseQueueIfRequested() ||
++                    !_ibEnable || !_commandBufferQueue.TryDequeue(out CommandBuffer entry))
++                {
++                    break;
++                }
++
++                bool flushCommandBuffer = true;
++
++                if (_flushSkips != 0)
++                {
++                    _flushSkips--;
++                    flushCommandBuffer = false;
++                }
++
++                ReadOnlySpan<int> words = entry.Fetch(entry.Processor.MemoryManager, flushCommandBuffer);
++
++                if (_prevChannelProcessor != entry.Processor)
++                {
++                    _prevChannelProcessor = entry.Processor;
++                    entry.Processor.ForceAllDirty();
++                }
++
++                entry.Processor.Process(entry.EntryAddress, words);
++            }
++
++            _interrupt = false;
++        }
++
+         /// <summary>
+         /// Sets the number of flushes that should be skipped for subsequent command buffers.
+         /// </summary>
+@@ -256,6 +368,10 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
+         /// <summary>
+         /// Disposes of resources used for GPFifo command processing.
+         /// </summary>
+-        public void Dispose() => _event.Dispose();
++        public void Dispose()
++        {
++            _split?.Dispose();
++            _event.Dispose();
++        }
+     }
+ }
+diff --git a/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoProcessor.cs b/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoProcessor.cs
+index c38bae606..d5967b0aa 100644
+--- a/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoProcessor.cs
++++ b/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoProcessor.cs
+@@ -2,12 +2,15 @@ using Ryujinx.Graphics.Device;
+ using Ryujinx.Graphics.Gpu.Engine.Compute;
+ using Ryujinx.Graphics.Gpu.Engine.Dma;
+ using Ryujinx.Graphics.Gpu.Engine.InlineToMemory;
++using Ryujinx.Graphics.Gpu.Engine.MME;
+ using Ryujinx.Graphics.Gpu.Engine.Threed;
+ using Ryujinx.Graphics.Gpu.Engine.Twod;
+ using Ryujinx.Graphics.Gpu.Image;
+ using Ryujinx.Graphics.Gpu.Memory;
+ using System;
++using System.Collections.Generic;
+ using System.Runtime.CompilerServices;
++using System.Runtime.InteropServices;
+ 
+ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
+ {
+@@ -392,6 +395,298 @@ namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
+             }
+         }
+ 
++        // ---- BOTW-PC: two-stage command processing (GPFifoSplit). Stage A members run on GPU.Decode, stage B members on
++        // the GPU command thread; both use _state (DmaState) and the macros, but never at the same time (mode changes
++        // happen only at drained entry boundaries). ----
++
++        private static readonly int _mmeInstructionRamPointer = (int)Marshal.OffsetOf<GPFifoClassState>(nameof(GPFifoClassState.LoadMmeInstructionRamPointer)) / 4;
++        private static readonly int _mmeInstructionRam = (int)Marshal.OffsetOf<GPFifoClassState>(nameof(GPFifoClassState.LoadMmeInstructionRam)) / 4;
++        private static readonly int _mmeStartAddressRamPointer = (int)Marshal.OffsetOf<GPFifoClassState>(nameof(GPFifoClassState.LoadMmeStartAddressRamPointer)) / 4;
++        private static readonly int _mmeStartAddressRam = (int)Marshal.OffsetOf<GPFifoClassState>(nameof(GPFifoClassState.LoadMmeStartAddressRam)) / 4;
++        private static readonly int _mmeShadowRamControl = (int)Marshal.OffsetOf<GPFifoClassState>(nameof(GPFifoClassState.SetMmeShadowRamControl)) / 4;
++
++        private DeviceStateWithShadow<ThreedClassState> _decode3d;
++        private DecodeState _decodeAdapter;
++        private GPFifoSplit _split;
++        private readonly List<FifoWord> _splitArgs = [];
++        private bool _openMacroCall;
++        private readonly Dictionary<MacroHLEFunctionName, MacroHLE> _splitHle = [];
++
++        /// <summary>Activation of the split in which stage A's register copy was last synchronized.</summary>
++        internal int SplitEpoch = -1;
++
++        /// <summary>Stage A: a macro call was started and not yet executed.</summary>
++        public bool HasOpenMacroCall => _openMacroCall;
++
++        /// <summary>
++        /// Stage A's view of the 3D registers, for guest macros: reads its copy, writes go to the copy and to stage B.
++        /// </summary>
++        private sealed class DecodeState : IDeviceState
++        {
++            private readonly GPFifoProcessor _parent;
++
++            public DecodeState(GPFifoProcessor parent) => _parent = parent;
++
++            public int Read(int offset) => _parent._decode3d.Read(offset);
++
++            public void Write(int offset, int data)
++            {
++                _parent._decode3d.Write(offset, data);
++                _parent._split.Put2(GPFifoSplit.PWrite3d | (offset << 8), data);
++            }
++        }
++
++        /// <summary>
++        /// Copies the 3D registers (and MME shadow RAM) into stage A's copy. Only while stage B is idle.
++        /// </summary>
++        public void SyncDecodeState()
++        {
++            if (_decode3d == null)
++            {
++                DeviceStateWithShadow<ThreedClassState> copy = null;
++
++                // Register effects of stage-B callbacks that guest macros can observe (BOTWPC_SPLIT_PROBE).
++                copy = new DeviceStateWithShadow<ThreedClassState>(new Dictionary<string, RwCallback>
++                {
++                    { nameof(ThreedClassState.SetFalcon04), new RwCallback(_ => copy.State.SetMmeShadowScratch[0] = 1, null) },
++                    { nameof(ThreedClassState.UniformBufferUpdateData), new RwCallback(_ => copy.State.UniformBufferState.Offset += 4, null) },
++                    { nameof(ThreedClassState.RenderEnableCondition), new RwCallback(null, () => 0) },
++                });
++
++                _decode3d = copy;
++                _decodeAdapter = new DecodeState(this);
++            }
++
++            _3dClass.CopyStateTo(_decode3d);
++        }
++
++        /// <summary>
++        /// Stage A: decodes a command buffer into packets for stage B (see <see cref="ProcessImpl"/>).
++        /// </summary>
++        public void DecodeForSplit(ulong baseGpuVa, ReadOnlySpan<int> commandBuffer, GPFifoSplit split)
++        {
++            _split = split;
++
++            for (int index = 0; index < commandBuffer.Length; index++)
++            {
++                int command = commandBuffer[index];
++
++                ulong gpuVa = baseGpuVa + (ulong)index * 4;
++
++                if (_state.MethodCount != 0)
++                {
++                    if (_state.Method == LoadInlineDataMethodOffset && _state.NonIncrementing && _state.SubChannel <= 2)
++                    {
++                        int consumeCount = Math.Min(_state.MethodCount, commandBuffer.Length - index);
++
++                        split.PutSpan(GPFifoSplit.PInline | (_state.SubChannel << 4), commandBuffer.Slice(index, consumeCount));
++
++                        index += consumeCount - 1;
++                        _state.MethodCount -= consumeCount;
++
++                        continue;
++                    }
++
++                    SendDecode(gpuVa, _state.Method, command, _state.SubChannel, _state.MethodCount <= 1);
++
++                    if (!_state.NonIncrementing)
++                    {
++                        _state.Method++;
++                    }
++
++                    if (_state.IncrementOnce)
++                    {
++                        _state.NonIncrementing = true;
++                    }
++
++                    _state.MethodCount--;
++                }
++                else
++                {
++                    CompressedMethod meth = Unsafe.As<int, CompressedMethod>(ref command);
++
++                    if (meth.MethodAddress == UniformBufferUpdateDataMethodOffset &&
++                        meth.MethodCount < commandBuffer.Length - index &&
++                        meth.SecOp == SecOp.NonIncMethod)
++                    {
++                        _decode3d.State.UniformBufferState.Offset += meth.MethodCount * 4;
++                        split.PutSpan(GPFifoSplit.PCbUpdate, commandBuffer.Slice(index + 1, meth.MethodCount));
++
++                        index += meth.MethodCount;
++                        continue;
++                    }
++
++                    switch (meth.SecOp)
++                    {
++                        case SecOp.IncMethod:
++                        case SecOp.NonIncMethod:
++                        case SecOp.OneInc:
++                            _state.Method = meth.MethodAddress;
++                            _state.SubChannel = meth.MethodSubchannel;
++                            _state.MethodCount = meth.MethodCount;
++                            _state.IncrementOnce = meth.SecOp == SecOp.OneInc;
++                            _state.NonIncrementing = meth.SecOp == SecOp.NonIncMethod;
++                            break;
++                        case SecOp.ImmdDataMethod:
++                            SendDecode(gpuVa, meth.MethodAddress, meth.ImmdData, meth.MethodSubchannel, true);
++                            break;
++                    }
++                }
++
++                split.MaybePublish();
++            }
++
++            split.PutHeader(GPFifoSplit.PEndBuffer);
++        }
++
++        /// <summary>
++        /// Stage A counterpart of <see cref="Send"/>: macros run here, everything else becomes a packet.
++        /// </summary>
++        private void SendDecode(ulong gpuVa, int offset, int argument, int subChannel, bool isLastCall)
++        {
++            if (offset < 0x60)
++            {
++                if (offset == _mmeInstructionRamPointer || offset == _mmeInstructionRam ||
++                    offset == _mmeStartAddressRamPointer || offset == _mmeStartAddressRam)
++                {
++                    // Macro code and start addresses belong to the stage that runs the macros.
++                    _fifoClass.Write(offset * 4, argument);
++                    return;
++                }
++
++                if (offset == _mmeShadowRamControl)
++                {
++                    _decode3d.State.SetMmeShadowRamControl = (uint)argument;
++                }
++
++                _split.Put2(GPFifoSplit.PMethod | (subChannel << 4) | (offset << 8), argument);
++            }
++            else if (offset < 0xe00)
++            {
++                if (subChannel == 0)
++                {
++                    _decode3d.Write(offset * 4, argument);
++                }
++
++                _split.Put2(GPFifoSplit.PMethod | (subChannel << 4) | (offset << 8), argument);
++            }
++            else if (subChannel is 0 or 3)
++            {
++                int macroIndex = (offset >> 1) & MacroIndexMask;
++                ref Macro macro = ref _fifoClass.MacroAt(macroIndex);
++
++                if ((offset & 1) != 0)
++                {
++                    if (macro.IsHle)
++                    {
++                        _splitArgs.Add(new FifoWord(gpuVa, argument));
++                    }
++                    else
++                    {
++                        _fifoClass.MmePushArgument(macroIndex, gpuVa, argument);
++                    }
++                }
++                else
++                {
++                    _fifoClass.MmeStart(macroIndex, argument);
++                    _splitArgs.Clear();
++                    _openMacroCall = true;
++                }
++
++                if (isLastCall)
++                {
++                    _openMacroCall = false;
++
++                    if (macro.IsHle)
++                    {
++                        if (macro.TakePendingCall(out int arg0))
++                        {
++                            _split.PutHle(subChannel, macro.HleFunction, arg0, CollectionsMarshal.AsSpan(_splitArgs));
++                        }
++
++                        _splitArgs.Clear();
++                    }
++                    else if (subChannel == 0)
++                    {
++                        _fifoClass.CallMme(macroIndex, _decodeAdapter);
++                    }
++                    else
++                    {
++                        // No stage-A copy of the 2D registers: let stage B finish, then run it here on the real state.
++                        _split.Drain();
++                        _split.InlineMacros++;
++                        _fifoClass.CallMme(macroIndex, _2dClass);
++                    }
++
++                    _split.PutHeader(GPFifoSplit.PDeferredDraws);
++                }
++            }
++        }
++
++        /// <summary>Stage B: executes a decoded method (the non-macro part of <see cref="Send"/>).</summary>
++        public void ExecuteMethod(int offset, int argument, int subChannel)
++        {
++            if (offset < 0x60)
++            {
++                _fifoClass.Write(offset * 4, argument);
++                return;
++            }
++
++            offset *= 4;
++
++            switch (subChannel)
++            {
++                case 0:
++                    _3dClass.Write(offset, argument);
++                    break;
++                case 1:
++                    _computeClass.Write(offset, argument);
++                    break;
++                case 2:
++                    _i2mClass.Write(offset, argument);
++                    break;
++                case 3:
++                    _2dClass.Write(offset, argument);
++                    break;
++                case 4:
++                    _dmaClass.Write(offset, argument);
++                    break;
++            }
++        }
++
++        /// <summary>Stage B: inline data of the inline-to-memory fast path.</summary>
++        public void ExecuteInlineData(int subChannel, ReadOnlySpan<int> data)
++        {
++            if (subChannel == 0)
++            {
++                _3dClass.LoadInlineData(data);
++            }
++            else if (subChannel == 1)
++            {
++                _computeClass.LoadInlineData(data);
++            }
++            else
++            {
++                _i2mClass.LoadInlineData(data);
++            }
++        }
++
++        /// <summary>Stage B: runs an HLE macro with the arguments stage A collected (word, GPU VA low, high).</summary>
++        public void ExecuteHle(MacroHLEFunctionName function, int subChannel, int arg0, ReadOnlySpan<int> args)
++        {
++            if (!_splitHle.TryGetValue(function, out MacroHLE hle))
++            {
++                _splitHle[function] = hle = new MacroHLE(this, function);
++            }
++
++            for (int i = 0; i < args.Length; i += 3)
++            {
++                hle.Fifo.Enqueue(new FifoWord((uint)args[i + 1] | ((ulong)(uint)args[i + 2] << 32), args[i]));
++            }
++
++            hle.Execute(default, subChannel == 3 ? _2dClass : _3dClass, arg0);
++        }
++
+         /// <summary>
+         /// Writes data directly to the state of the specified class.
+         /// </summary>
+diff --git a/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoSplit.cs b/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoSplit.cs
+new file mode 100644
+index 000000000..92df9da87
+--- /dev/null
++++ b/src/Ryujinx.Graphics.Gpu/Engine/GPFifo/GPFifoSplit.cs
+@@ -0,0 +1,525 @@
++using Ryujinx.Common.Logging;
++using Ryujinx.Graphics.Gpu.Engine.MME;
++using System;
++using System.Runtime.CompilerServices;
++using System.Threading;
++
++namespace Ryujinx.Graphics.Gpu.Engine.GPFifo
++{
++    /// <summary>
++    /// BOTW-PC: two-stage GPU command processing (BOTWPC_GPFIFO_SPLIT=1, off by default).
++    /// </summary>
++    /// <remarks>
++    /// Stage A (thread "GPU.Decode") fetches GPFIFO entries, decodes the command words and runs the guest's MME macros
++    /// against its own copy of the 3D register file; stage B (the existing GPU command thread) applies every register
++    /// write with its callbacks, runs HLE macros (the draws), state updates, bindings, semaphores and syncpoints, in the
++    /// original order. Stage A hands work over through a ring of compact packets, published per GPFIFO entry, never
++    /// per command buffer handshake (the reason a per-buffer decode stage measured slower, PERFORMANCE.md).
++    ///
++    /// Correctness rules:
++    /// - Entries with Entry1Sync.Wait ("wait for prior work before fetching") drain stage B before they are fetched,
++    ///   which is the hardware's GPFIFO semantics; other entries are fetched ahead, as the hardware prefetches them.
++    /// - Guest macros read only stage A's register copy. It receives every 3D register write stage A produces and
++    ///   mirrors the register effects of stage-B callbacks that macros could observe (SetFalcon04 scratch, uniform
++    ///   buffer offset, render-enable read as 0). BOTWPC_SPLIT_PROBE measured BotW 1.6.0: 688 818 macro register reads,
++    ///   none stale in gameplay; the only stale register (Falcon04 scratch, at boot) is mirrored here.
++    /// - A 2D-engine guest macro (no stage-A copy of that state) drains stage B and runs inline.
++    /// - The mode can change only at an entry boundary with no macro call open; on the way in, stage A's copy is
++    ///   re-synchronized from the real register file while stage B is idle. This allows in-run A/B
++    ///   (BOTWPC_AB_SWITCHES=BOTWPC_GPFIFO_SPLIT).
++    /// </remarks>
++    sealed class GPFifoSplit : IDisposable
++    {
++        public static readonly bool Enabled = Environment.GetEnvironmentVariable("BOTWPC_GPFIFO_SPLIT") == "1";
++        private static readonly Ryujinx.Common.BotwPc.AbPhase.Switch _switch = new("BOTWPC_GPFIFO_SPLIT");
++
++        // Packet types (low 4 bits of the header word).
++        public const int PMethod = 0;        // header | subchannel << 4 | method << 8, value
++        public const int PWrite3d = 1;       // header | offset << 8, value (guest macro output)
++        public const int PInline = 2;        // header | subchannel << 4, count, words
++        public const int PCbUpdate = 3;      // header, count, words
++        public const int PHle = 4;           // header | subchannel << 4 | function << 8, arg0, count, count x (word, va lo, va hi)
++        public const int PDeferredDraws = 5; // header
++        public const int PEndBuffer = 6;     // header (end of a command buffer: flush pending uniform data)
++        public const int PProcessor = 7;     // header | forceAllDirty << 4 | index << 8
++        private const int PWrap = 8;
++
++        private const int RingBits = 22;
++        private const int RingSize = 1 << RingBits;
++        private const long RingMask = RingSize - 1;
++        private const int PublishThreshold = 4096;
++
++        private readonly GPFifoDevice _device;
++        private readonly int[] _ring = new int[RingSize];
++        private readonly GPFifoProcessor[] _processors = new GPFifoProcessor[64];
++        private int _processorCount;
++
++        // Producer (stage A) position and the published copy of it; consumer (stage B) position and its published copy.
++        private long _write;
++        private long _published;
++        private long _read;
++        private long _consumed;
++
++        private int _consumerWaiting;
++        private volatile bool _decodeBusy;
++        private volatile bool _active;
++        private volatile bool _wantActive;
++        private volatile bool _queueReleased;
++        private volatile bool _disposed;
++
++        private readonly AutoResetEvent _decodeEvent = new(false);
++        private readonly Thread _thread;
++
++        private GPFifoProcessor _decodeProcessor;
++        private int _epoch;
++        private GPFifoProcessor _executeProcessor;
++
++        public long Drains;
++        public long InlineMacros;
++        public long SyncWaitsWithoutFlush;
++
++        // Diagnostics (Stopwatch ticks): stage B executing packets / spinning for stage A; stage A decoding / draining.
++        private long _bExecTicks, _bWaitTicks, _aDecodeTicks, _aDrainTicks, _lastReportTicks;
++        private long _entries;
++        private long _nextReport;
++
++        public GPFifoSplit(GPFifoDevice device)
++        {
++            _device = device;
++            _thread = new Thread(DecodeLoop) { Name = "GPU.Decode", IsBackground = true };
++            _thread.Start();
++
++            Logger.Info?.Print(LogClass.Gpu, "BOTW-PC: two-stage GPU command processing enabled (BOTWPC_GPFIFO_SPLIT=1)");
++        }
++
++        /// <summary>True while stage A owns the GPFIFO entry queue.</summary>
++        public bool Active => _active;
++
++        /// <summary>
++        /// Stage B: waits (spinning, up to about half a millisecond) for packets while stage A is decoding, instead of
++        /// leaving the dispatch loop and sleeping: after each sync drain stage B has nothing to do until stage A
++        /// decoded the next entry, and a sleep/wake there would add its latency to the critical thread every time.
++        /// </summary>
++        public bool WaitForPacketsWhileDecoding()
++        {
++            long start = System.Diagnostics.Stopwatch.GetTimestamp();
++            long deadline = start + System.Diagnostics.Stopwatch.Frequency / 2000;
++
++            while (_decodeBusy && !HasPackets)
++            {
++                if (System.Diagnostics.Stopwatch.GetTimestamp() > deadline)
++                {
++                    break;
++                }
++
++                Thread.SpinWait(20);
++            }
++
++            Interlocked.Add(ref _bWaitTicks, System.Diagnostics.Stopwatch.GetTimestamp() - start);
++
++            return HasPackets;
++        }
++
++        /// <summary>True when stage B has packets to execute.</summary>
++        public bool HasPackets => Volatile.Read(ref _published) != _read;
++
++        public void SignalNewEntries() => _decodeEvent.Set();
++
++        // ---- Stage A ----
++
++        private void DecodeLoop()
++        {
++            while (!_disposed)
++            {
++                bool wantOn = _switch.IsOn;
++
++                if (wantOn != _active)
++                {
++                    if (!SwitchMode(wantOn))
++                    {
++                        _decodeEvent.WaitOne(1);
++                        continue;
++                    }
++                }
++
++                if (!_active)
++                {
++                    _decodeEvent.WaitOne(8);
++                    continue;
++                }
++
++                if (!_device.TryDequeueForSplit(out GPFifoProcessor processor, out ulong address, out ReadOnlySpan<int> words, this))
++                {
++                    Publish();
++                    _decodeBusy = false;
++                    _decodeEvent.WaitOne(8);
++                    continue;
++                }
++
++                _decodeBusy = true;
++
++                if (processor.SplitEpoch != _epoch)
++                {
++                    // A channel not seen since the split became active: copy its registers once stage B is idle.
++                    Drain();
++                    processor.SyncDecodeState();
++                    processor.SplitEpoch = _epoch;
++                }
++
++                if (processor != _decodeProcessor)
++                {
++                    int index = Array.IndexOf(_processors, processor, 0, _processorCount);
++
++                    if (index < 0)
++                    {
++                        index = _processorCount;
++                        _processors[_processorCount++] = processor;
++                    }
++
++                    // Same as DispatchCalls: changing the channel forces all host state to be updated.
++                    PutHeader(PProcessor | (1 << 4) | (index << 8));
++                    _decodeProcessor = processor;
++                }
++
++                long decodeStart = System.Diagnostics.Stopwatch.GetTimestamp();
++                processor.DecodeForSplit(address, words, this);
++                Publish();
++                _entries++;
++
++                long now = System.Diagnostics.Stopwatch.GetTimestamp();
++                _aDecodeTicks += now - decodeStart;
++
++                if (now >= _nextReport)
++                {
++                    double ms(long t) => t * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
++                    double span = ms(now - _lastReportTicks) / 1000.0;
++                    _lastReportTicks = now;
++                    _nextReport = now + System.Diagnostics.Stopwatch.Frequency * 10;
++                    Logger.Info?.Print(LogClass.Gpu, $"BOTW-PC GPFIFO split: {_entries} entries, {Drains} drains, {InlineMacros} inline 2D macros; " +
++                        $"per second: B execute {ms(Interlocked.Exchange(ref _bExecTicks, 0)) / span:F0} ms, B wait {ms(Interlocked.Exchange(ref _bWaitTicks, 0)) / span:F0} ms, " +
++                        $"A decode {ms(_aDecodeTicks) / span:F0} ms, A drain wait {ms(_aDrainTicks) / span:F0} ms");
++                    _aDecodeTicks = 0;
++                    _aDrainTicks = 0;
++                }
++            }
++        }
++
++        /// <summary>
++        /// Called by the GPFIFO device before fetching an entry that must see all previous work completed.
++        /// </summary>
++        public void BeforeSyncFetch(bool syncWait, bool flush)
++        {
++            Publish();
++
++            if (syncWait)
++            {
++                if (flush)
++                {
++                    Drain();
++                }
++                else
++                {
++                    SyncWaitsWithoutFlush++;
++                    Drain();
++                }
++            }
++        }
++
++        private bool SwitchMode(bool on)
++        {
++            if (!on)
++            {
++                // Stop taking entries; stage B executes what is in the ring, then takes the queue again.
++                if (_decodeProcessor != null && _decodeProcessor.HasOpenMacroCall)
++                {
++                    return false;
++                }
++
++                Publish();
++                Drain();
++                _decodeProcessor = null;
++                _queueReleased = false;
++                _active = false;
++                _device.SignalNewEntries();
++
++                return true;
++            }
++
++            // Ask stage B to stop taking entries at its next entry boundary, then take over with fresh state copies.
++            _wantActive = true;
++            _device.SignalNewEntries();
++
++            if (!_queueReleased)
++            {
++                return false;
++            }
++
++            _wantActive = false;
++            _epoch++;
++            _executeProcessor = null;
++            _decodeProcessor = null;
++            _active = true;
++
++            return true;
++        }
++
++        /// <summary>
++        /// Stage B: called between entries when it executes the queue itself; returns true if it must stop (stage A
++        /// takes over).
++        /// </summary>
++        public bool ReleaseQueueIfRequested()
++        {
++            if (_wantActive)
++            {
++                _queueReleased = true;
++                _decodeEvent.Set();
++
++                return true;
++            }
++
++            return false;
++        }
++
++        /// <summary>Stage B keeps not taking entries while a takeover is pending or active.</summary>
++        public bool QueueOwnedByDecode => _active || _queueReleased;
++
++        /// <summary>
++        /// Waits until stage B executed every published packet (stage A only).
++        /// </summary>
++        public void Drain()
++        {
++            Publish();
++            Drains++;
++
++            long start = System.Diagnostics.Stopwatch.GetTimestamp();
++            SpinWait wait = new();
++
++            while (Volatile.Read(ref _consumed) != _write)
++            {
++                wait.SpinOnce(sleep1Threshold: -1);
++            }
++
++            _aDrainTicks += System.Diagnostics.Stopwatch.GetTimestamp() - start;
++        }
++
++        [MethodImpl(MethodImplOptions.AggressiveInlining)]
++        private void EnsureSpace(int count)
++        {
++            long offset = _write & RingMask;
++
++            if (offset + count + 1 > RingSize)
++            {
++                WaitForFree((int)(RingSize - offset));
++                _ring[offset] = PWrap;
++                _write += RingSize - offset;
++            }
++
++            if (_write + count - Volatile.Read(ref _consumed) >= RingSize - 1)
++            {
++                WaitForFree(count);
++            }
++        }
++
++        private void WaitForFree(int count)
++        {
++            Publish();
++            SpinWait wait = new();
++
++            while (_write + count - Volatile.Read(ref _consumed) >= RingSize - 1)
++            {
++                wait.SpinOnce(sleep1Threshold: -1);
++            }
++        }
++
++        [MethodImpl(MethodImplOptions.AggressiveInlining)]
++        public void PutHeader(int header)
++        {
++            EnsureSpace(1);
++            _ring[_write & RingMask] = header;
++            _write++;
++        }
++
++        [MethodImpl(MethodImplOptions.AggressiveInlining)]
++        public void Put2(int header, int value)
++        {
++            EnsureSpace(2);
++            long offset = _write & RingMask;
++            _ring[offset] = header;
++            _ring[offset + 1] = value;
++            _write += 2;
++        }
++
++        public void PutSpan(int header, ReadOnlySpan<int> words)
++        {
++            EnsureSpace(words.Length + 2);
++            long offset = _write & RingMask;
++            _ring[offset] = header;
++            _ring[offset + 1] = words.Length;
++            words.CopyTo(_ring.AsSpan((int)offset + 2, words.Length));
++            _write += words.Length + 2;
++
++            if (_write - Volatile.Read(ref _published) >= PublishThreshold)
++            {
++                Publish();
++            }
++        }
++
++        public void PutHle(int subChannel, MacroHLEFunctionName function, int arg0, ReadOnlySpan<FifoWord> args)
++        {
++            EnsureSpace(4 + args.Length * 3);
++            long offset = _write & RingMask;
++            _ring[offset] = PHle | (subChannel << 4) | ((int)function << 8);
++            _ring[offset + 1] = arg0;
++            _ring[offset + 2] = args.Length;
++
++            for (int i = 0; i < args.Length; i++)
++            {
++                _ring[offset + 3 + i * 3] = args[i].Word;
++                _ring[offset + 4 + i * 3] = (int)args[i].GpuVa;
++                _ring[offset + 5 + i * 3] = (int)(args[i].GpuVa >> 32);
++            }
++
++            _write += 3 + args.Length * 3;
++
++            // Draws: let stage B start early.
++            Publish();
++        }
++
++        [MethodImpl(MethodImplOptions.AggressiveInlining)]
++        public void MaybePublish()
++        {
++            if (_write - _published >= PublishThreshold)
++            {
++                Publish();
++            }
++        }
++
++        public void Publish()
++        {
++            if (_write == _published)
++            {
++                return;
++            }
++
++            Interlocked.Exchange(ref _published, _write);
++
++            if (Volatile.Read(ref _consumerWaiting) != 0)
++            {
++                _device.SignalNewEntries();
++            }
++        }
++
++        // ---- Stage B ----
++
++        /// <summary>
++        /// Stage B is about to wait for work (full barrier, so stage A either sees the flag or stage B sees the packets).
++        /// </summary>
++        public void BeginConsumerWait() => Interlocked.Exchange(ref _consumerWaiting, 1);
++
++        public void EndConsumerWait() => Volatile.Write(ref _consumerWaiting, 0);
++
++        /// <summary>
++        /// Executes all published packets (stage B, GPU command thread).
++        /// </summary>
++        public void Execute(ref bool interrupt)
++        {
++            long execStart = System.Diagnostics.Stopwatch.GetTimestamp();
++            ExecuteImpl(ref interrupt);
++            Interlocked.Add(ref _bExecTicks, System.Diagnostics.Stopwatch.GetTimestamp() - execStart);
++        }
++
++        private void ExecuteImpl(ref bool interrupt)
++        {
++            long published = Volatile.Read(ref _published);
++            int executed = 0;
++
++            while (_read != published && !interrupt)
++            {
++                long offset = _read & RingMask;
++                int header = _ring[offset];
++                GPFifoProcessor processor = _executeProcessor;
++
++                switch (header & 0xf)
++                {
++                    case PMethod:
++                        processor.ExecuteMethod(header >> 8, _ring[offset + 1], (header >> 4) & 0xf);
++                        _read += 2;
++                        break;
++                    case PWrite3d:
++                        processor.ThreedClass.Write(header >> 8, _ring[offset + 1]);
++                        _read += 2;
++                        break;
++                    case PInline:
++                        {
++                            int count = _ring[offset + 1];
++                            processor.ExecuteInlineData((header >> 4) & 0xf, _ring.AsSpan((int)offset + 2, count));
++                            _read += 2 + count;
++                            break;
++                        }
++                    case PCbUpdate:
++                        {
++                            int count = _ring[offset + 1];
++                            processor.ThreedClass.ConstantBufferUpdate(_ring.AsSpan((int)offset + 2, count));
++                            _read += 2 + count;
++                            break;
++                        }
++                    case PHle:
++                        {
++                            int count = _ring[offset + 2];
++                            processor.ExecuteHle((MacroHLEFunctionName)(header >> 8), (header >> 4) & 0xf, _ring[offset + 1], _ring.AsSpan((int)offset + 3, count * 3));
++                            _read += 3 + count * 3;
++                            break;
++                        }
++                    case PDeferredDraws:
++                        processor.PerformDeferredDraws();
++                        _read++;
++                        break;
++                    case PEndBuffer:
++                        processor.ThreedClass.FlushUboDirty();
++                        _read++;
++                        break;
++                    case PProcessor:
++                        _executeProcessor = _processors[header >> 8];
++
++                        if (((header >> 4) & 1) != 0)
++                        {
++                            _executeProcessor.ForceAllDirty();
++                        }
++
++                        _read++;
++                        break;
++                    case PWrap:
++                        _read += RingSize - offset;
++                        break;
++                    default:
++                        throw new InvalidOperationException($"BOTW-PC GPFIFO split: bad packet 0x{header:x} at {_read}");
++                }
++
++                if (++executed == 512)
++                {
++                    executed = 0;
++                    Volatile.Write(ref _consumed, _read);
++
++                    if (_read == published)
++                    {
++                        published = Volatile.Read(ref _published);
++                    }
++                }
++                else if (_read == published)
++                {
++                    published = Volatile.Read(ref _published);
++                }
++            }
++
++            Volatile.Write(ref _consumed, _read);
++        }
++
++        public void Dispose()
++        {
++            _disposed = true;
++            _decodeEvent.Set();
++            _thread.Join(1000);
++            _decodeEvent.Dispose();
++        }
++    }
++}
+diff --git a/src/Ryujinx.Graphics.Gpu/Engine/MME/Macro.cs b/src/Ryujinx.Graphics.Gpu/Engine/MME/Macro.cs
+index 77b93c142..ab23426b9 100644
+--- a/src/Ryujinx.Graphics.Gpu/Engine/MME/Macro.cs
++++ b/src/Ryujinx.Graphics.Gpu/Engine/MME/Macro.cs
+@@ -101,6 +101,29 @@ namespace Ryujinx.Graphics.Gpu.Engine.MME
+             }
+         }
+ 
++        /// <summary>BOTW-PC (GPFifoSplit): true if the macro is emulated by an HLE function.</summary>
++        public readonly bool IsHle => _hleFunction != MacroHLEFunctionName.None && _executionEngine is MacroHLE;
++
++        /// <summary>BOTW-PC (GPFifoSplit): the HLE function of the macro.</summary>
++        public readonly MacroHLEFunctionName HleFunction => _hleFunction;
++
++        /// <summary>
++        /// BOTW-PC (GPFifoSplit): consumes a started call, as <see cref="Execute"/> would, without running it here.
++        /// </summary>
++        public bool TakePendingCall(out int argument)
++        {
++            argument = _argument;
++
++            if (!_executionPending)
++            {
++                return false;
++            }
++
++            _executionPending = false;
++
++            return true;
++        }
++
+         /// <summary>
+         /// Pushes an argument to the macro call argument FIFO.
+         /// </summary>
+diff --git a/src/Ryujinx.Graphics.Gpu/Engine/Threed/ThreedClass.cs b/src/Ryujinx.Graphics.Gpu/Engine/Threed/ThreedClass.cs
+index 47f4d5bd0..1b3560476 100644
+--- a/src/Ryujinx.Graphics.Gpu/Engine/Threed/ThreedClass.cs
++++ b/src/Ryujinx.Graphics.Gpu/Engine/Threed/ThreedClass.cs
+@@ -202,6 +202,15 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
+             }
+         }
+ 
++        /// <summary>
++        /// BOTW-PC (GPFifoSplit): copies the registers and the MME shadow RAM into another register file.
++        /// </summary>
++        internal void CopyStateTo(DeviceStateWithShadow<ThreedClassState> target)
++        {
++            target.State = _state.State;
++            target.ShadowState = _state.ShadowState;
++        }
++
+         /// <summary>
+         /// Sets the shadow ram control value of all sub-channels.
+         /// </summary>

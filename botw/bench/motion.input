@@ -1,0 +1,13 @@
+# Load the save (see continue.input), then a fixed movement: turn the camera right for 1.0 s,
+# walk forward for 1.5 s. With correct game timing the end state is the same at any frame rate.
+# start_s dur buttons [lx ly rx ry]
+25  0.2 A
+28  0.2 A
+31  0.2 A
+34  0.2 A
+37  0.2 A
+40  0.2 A
+43  0.2 A
+46  0.2 A
+95  1.0 -  0 0 32767 0
+100 1.5 -  0 32767 0 0

@@ -1,0 +1,17 @@
+diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+index 3231952..e085231 100644
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+@@ -1933,6 +1933,12 @@ void MVKPhysicalDevice::initMetalFeatures() {
+ 	_metalFeatures.descriptorSetArgumentBuffers = (_metalFeatures.argumentBuffers &&
+ 												   (mvkOSVersionIsAtLeast(10.16) ||
+ 													_properties.vendorID == kIntelVendorId));
++#else
++	// BOTW-PC: Apple GPUs with Tier 2 argument buffers (A13 / M1 and later) on iOS. Ryujinx's shaders need more than the
++	// 31 buffer slots Metal has without them (Breath of the Wild's compute shaders bind buffer 31).
++	_metalFeatures.descriptorSetArgumentBuffers = (_metalFeatures.argumentBuffers &&
++												   [_mtlDevice respondsToSelector: @selector(argumentBuffersSupport)] &&
++												   _mtlDevice.argumentBuffersSupport >= MTLArgumentBuffersTier2);
+ #endif
+ 	// Currently, if we don't support descriptor set argument buffers, we can't support argument buffers.
+ 	_metalFeatures.argumentBuffers = _metalFeatures.descriptorSetArgumentBuffers;

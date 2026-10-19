@@ -1,0 +1,109 @@
+#version 450 core
+
+// BOTW-PC: camera motion vectors for DLSS, reconstructed from scene depth and the current clip → previous clip
+// transform (prevViewProj * inverse(curViewProj), computed in double precision on the CPU so the large world
+// translations cancel there). Output: previous position − current position, in render pixels.
+// Also writes reversed depth (1 − depth = near/z, reversed infinite-far Z): BotW's standard depth (1 − near/z) puts the
+// whole scene in [0.95, 1.0]; reversed depth keeps the precision for DLSS and for the disocclusion test below.
+// Disocclusion: a pixel whose reprojected position was covered by something clearly nearer in the previous frame
+// (previous reversed depth, ping-pong, 3x3) has no valid history. DLSS's colour clamp kept that history when occluder
+// and background have similar colours, and the transformer presets did not visibly react to the bias-current-colour
+// mask, so such pixels get an off-screen motion vector (no history): this removed the trail of copies of Link's head
+// on camera turns in the shrine (DLSS.md). The mask is written too (optional DLSS input).
+layout (std140, binding = 0) uniform motion_params
+{
+    vec4 reproject[4];   // current clip → previous clip, rows
+    vec4 size_flags;     // render width, height, flags (bit 0: depth is [-1,1] NDC, bit 1: flip NDC y, bit 2: reversed depth,
+                         // bit 3: previous depth valid, bit 4: disoccluded pixels get off-screen motion),
+                         // disocclusion threshold (relative)
+};
+
+layout (set = 2, binding = 0) uniform sampler2D depth_tex;
+layout (set = 2, binding = 1) uniform sampler2D prev_depth_tex;
+layout (set = 3, binding = 0, rg16f) writeonly uniform image2D motion_out;
+layout (set = 3, binding = 1, r32f) writeonly uniform image2D depth_out;
+layout (set = 3, binding = 2, r8) writeonly uniform image2D mask_out;
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Previous clip position of the point seen at pixel p with raw depth buffer value raw.
+vec4 PreviousClip(ivec2 p, float raw, vec2 size, int flags)
+{
+    float depth = (flags & 4) != 0 ? 1.0 - raw : raw;
+    vec2 ndc = (vec2(p) + 0.5) / size * 2.0 - 1.0;
+
+    if ((flags & 2) != 0)
+    {
+        ndc.y = -ndc.y;
+    }
+
+    vec4 clip = vec4(ndc, (flags & 1) != 0 ? depth * 2.0 - 1.0 : depth, 1.0);
+
+    return vec4(dot(reproject[0], clip), dot(reproject[1], clip), dot(reproject[2], clip), dot(reproject[3], clip));
+}
+
+// Previous position − current position of that point, in render pixels.
+vec2 Motion(ivec2 p, vec4 prev, vec2 size, int flags)
+{
+    vec2 prev_ndc = prev.xy / prev.w;
+
+    if ((flags & 2) != 0)
+    {
+        prev_ndc.y = -prev_ndc.y;
+    }
+
+    return (prev_ndc * 0.5 + 0.5) * size - (vec2(p) + 0.5);
+}
+
+void main()
+{
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    vec2 size = size_flags.xy;
+
+    if (p.x >= int(size.x) || p.y >= int(size.y))
+    {
+        return;
+    }
+
+    int flags = int(size_flags.z);
+    float raw = texelFetch(depth_tex, p, 0).r;
+    float reversed = (flags & 4) != 0 ? raw : 1.0 - raw;
+    imageStore(depth_out, p, vec4(reversed, 0.0, 0.0, 0.0));
+
+    vec4 prev = PreviousClip(p, raw, size, flags);
+    vec2 motion = Motion(p, prev, size, flags);
+    vec2 prev_pixel = (vec2(p) + 0.5) + motion;
+    float disoccluded = 0.0;
+
+    if ((flags & 8) != 0 && all(greaterThanEqual(prev_pixel, vec2(0.0))) && all(lessThan(prev_pixel, size)))
+    {
+        // Where this point was last frame, in reversed depth (larger = nearer), against what was stored there.
+        float prev_depth = (flags & 1) != 0 ? prev.z / prev.w * 0.5 + 0.5 : prev.z / prev.w;
+        float expected = (flags & 4) != 0 ? prev_depth : 1.0 - prev_depth;
+        // Nearest of the 3x3 texels around it: jitter and rounding put silhouette pixels on either side of the edge.
+        ivec2 c = ivec2(prev_pixel);
+        float stored = 0.0;
+
+        for (int dy = -1; dy <= 1; dy++)
+        {
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                stored = max(stored, texelFetch(prev_depth_tex, clamp(c + ivec2(dx, dy), ivec2(0), ivec2(size) - 1), 0).r);
+            }
+        }
+
+        if (expected > 0.0 && stored > expected * (1.0 + size_flags.w))
+        {
+            disoccluded = 1.0;
+        }
+    }
+
+    // Disoccluded: point the motion off-screen so DLSS finds no history and uses the current frame.
+    if (disoccluded != 0.0 && (flags & 16) != 0)
+    {
+        motion = vec2(size.x * 4.0, 0.0);
+    }
+
+    imageStore(motion_out, p, vec4(motion, 0.0, 0.0));
+    imageStore(mask_out, p, vec4(disoccluded, 0.0, 0.0, 0.0));
+}

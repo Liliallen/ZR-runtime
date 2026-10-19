@@ -1,0 +1,23 @@
+# Overlay with 'pause game' off: game input while open must not reach the game; DLSS Quality and 60 FPS set live;
+# mouse click on the first Performance row (HUD); close; walk; reopen and switch DLSS off. Needs BOTWPC_NGX_DIR.
+25  0.2 A
+28  0.2 A
+31  0.2 A
+34  0.2 A
+37  0.2 A
+40  0.2 A
+43  0.2 A
+46  0.2 A
+62   0.15 pad LS+RS
+63   2.0  -  0 32767 0 0
+64   0.1  pad Right
+66   0.1  pad RB
+67   0.1  pad Right
+69   0.1  pad RB
+70   0.4  mouse 0.5 0.275
+70.5 0.2  mouse 0.5 0.275 click
+72   0.15 pad LS+RS
+73   2.0  -  0 32767 0 0
+86   0.15 pad LS+RS
+87   0.1  pad Left
+88   0.15 pad LS+RS

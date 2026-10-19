@@ -1,0 +1,34 @@
+diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKShaderModule.mm b/MoltenVK/MoltenVK/GPUObjects/MVKShaderModule.mm
+index 8170433..054fc63 100644
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKShaderModule.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKShaderModule.mm
+@@ -244,12 +244,28 @@ MVKShaderLibrary* MVKShaderLibraryCache::findShaderLibrary(SPIRVToMSLConversionC
+ 	return nullptr;
+ }
+ 
++// BOTW-PC: the cache only needs what matches() and alignWith() read, i.e. the shader inputs, outputs and this stage's
++// resource bindings the shader actually uses. Full copies of Ryujinx's configurations (every binding of every
++// descriptor set) are ~300 KB each, ~500 MB for Breath of the Wild's pipelines: too much for an 8 GB iPad.
++static SPIRVToMSLConversionConfiguration usedPartOf(const SPIRVToMSLConversionConfiguration& config) {
++	SPIRVToMSLConversionConfiguration used;
++	used.options = config.options;
++	for (const auto& si : config.shaderInputs) { if (si.outIsUsedByShader) { used.shaderInputs.push_back(si); } }
++	for (const auto& so : config.shaderOutputs) { if (so.outIsUsedByShader) { used.shaderOutputs.push_back(so); } }
++	for (const auto& rb : config.resourceBindings) {
++		if (rb.resourceBinding.stage == config.options.entryPointStage && rb.outIsUsedByShader) { used.resourceBindings.push_back(rb); }
++	}
++	used.discreteDescriptorSets = config.discreteDescriptorSets;
++	used.dynamicBufferDescriptors = config.dynamicBufferDescriptors;
++	return used;
++}
++
+ // Adds and returns a new shader library configured from the specified conversion configuration.
+ MVKShaderLibrary* MVKShaderLibraryCache::addShaderLibrary(SPIRVToMSLConversionConfiguration* pShaderConfig,
+ 														  const string& mslSourceCode,
+ 														  const SPIRVToMSLConversionResults& shaderConversionResults) {
+ 	MVKShaderLibrary* shLib = new MVKShaderLibrary(_owner, mslSourceCode, shaderConversionResults);
+-	_shaderLibraries.emplace_back(*pShaderConfig, shLib);
++	_shaderLibraries.emplace_back(usedPartOf(*pShaderConfig), shLib);
+ 	return shLib;
+ }
+ 

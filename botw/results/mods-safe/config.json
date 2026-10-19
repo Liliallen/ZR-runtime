@@ -1,0 +1,6 @@
+{
+ "vsync_mode": 0,
+ "custom_vsync_interval": 120,
+ "backend_threading": "Auto",
+ "res_scale": 1
+}

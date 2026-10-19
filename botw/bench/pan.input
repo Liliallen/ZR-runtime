@@ -1,0 +1,13 @@
+# Progressed save (outside the Shrine of Resurrection, Great Plateau): load, then a fixed outdoor sequence.
+# Stand still and turn the camera right, then left (DLSS motion / ghosting checks). Logical Switch buttons.
+# start_s dur buttons [lx ly rx ry]
+25  0.2 A
+28  0.2 A
+31  0.2 A
+34  0.2 A
+37  0.2 A
+40  0.2 A
+43  0.2 A
+46  0.2 A
+78  3.0 -  0 0 32767 0
+82  3.0 -  0 0 -32767 0

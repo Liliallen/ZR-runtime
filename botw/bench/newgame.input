@@ -1,0 +1,8 @@
+# Title -> "Start new game" (second item) -> "overwrite autosave?" -> Start -> opening sequence.
+# Overwrites only the isolated dev save (back it up first). Used to time the opening cutscene.
+# D-pad taps are kept short: menu key-repeat appears to count frames, so long holds repeat at high FPS.
+# start_s dur buttons
+26  0.05 DpadDown
+28  0.2 A
+31  0.05 DpadUp
+33  0.2 A

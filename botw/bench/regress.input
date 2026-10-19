@@ -1,0 +1,29 @@
+# High-frame-rate regression scenario (progressed save, outdoor Great Plateau). The FPS++ list of Wii U high-FPS
+# defects is the checklist: jump/gravity, walking and sprint speed, camera rate, attack and throw animations.
+# Run it at 30 FPS (stock) and 120 FPS with BOTWPC_CAMERA_LOG and compare with botw/scripts/camera_track.py: with
+# correct timing every segment moves and turns the camera by the same amount (segments listed there). The actions
+# start right after loading, before dusk: night enemies (Keese) spawn here after ~19:35 and can attack Link.
+# start_s dur buttons [lx ly rx ry]
+25  0.2 A
+28  0.2 A
+31  0.2 A
+34  0.2 A
+37  0.2 A
+40  0.2 A
+43  0.2 A
+46  0.2 A
+# jump in place (gravity / jump arc)
+65 0.15 X
+# walk forward 2 s (character controller speed)
+68 2.0 -  0 32767 0 0
+# three attacks with the equipped weapon (attack animation / combo timing)
+72   0.15 Y
+72.7 0.15 Y
+73.4 0.15 Y
+# hold R to aim a throw, release (thrown weapon flight: Havok rigid body)
+75.5 1.2 R
+# camera turn right 1 s (camera rate)
+79 1.0 -  0 0 32767 0
+# sprint forward 1.5 s (B held) and jump at the end (sprint speed, stamina)
+82 1.5 B  0 32767 0 0
+83.6 0.15 X

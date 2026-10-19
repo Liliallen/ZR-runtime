@@ -1,0 +1,46 @@
+[
+ {
+  "thread": "HLE.GuestThread",
+  "cpu_pct": 85.2
+ },
+ {
+  "thread": "GUI.RenderThrea",
+  "cpu_pct": 53.9
+ },
+ {
+  "thread": "GPU.MainThread",
+  "cpu_pct": 28.5
+ },
+ {
+  "thread": "Ryujinx",
+  "cpu_pct": 7.9
+ },
+ {
+  "thread": "HLE.TimeManager",
+  "cpu_pct": 5.2
+ },
+ {
+  "thread": "AudioProcessor.",
+  "cpu_pct": 3.0
+ },
+ {
+  "thread": "AudioRendererMa",
+  "cpu_pct": 2.4
+ },
+ {
+  "thread": "Common.Nanoslee",
+  "cpu_pct": 2.3
+ },
+ {
+  "thread": "HLE.OsThread.11",
+  "cpu_pct": 1.7
+ },
+ {
+  "thread": "SurfaceFlinger.",
+  "cpu_pct": 1.3
+ },
+ {
+  "thread": "GUI.WindowThrea",
+  "cpu_pct": 1.3
+ }
+]

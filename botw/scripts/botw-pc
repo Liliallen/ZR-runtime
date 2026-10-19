@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# BOTW-PC launcher: starts Breath of the Wild directly (standalone mode). Data: ~/.local/share/BOTW-PC unless
+# a "portable" folder sits next to the binaries or -r <dir> is given. First run: botw-pc --botw-setup --help
+set -euo pipefail
+HERE=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+if [ -x "$HERE/Ryujinx" ]; then BIN=$HERE                                   # packaged: launcher next to the binaries
+else BIN=${BOTWPC_BUILD:-$(cd "$HERE/../../.." && pwd)/build-botwpc}; fi    # source tree: botw/scripts/botw-pc
+# Framework-dependent dev builds use the user-local .NET from .tools; packaged builds are self-contained.
+TOOLS=$(cd "$HERE/../../.." 2>/dev/null && pwd || true)/.tools/dotnet
+[ -z "${DOTNET_ROOT:-}" ] && [ -d "$TOOLS" ] && export DOTNET_ROOT=$TOOLS
+# DLSS bridge: packaged builds ship it in ngx/ next to the binaries; dev builds use the one built in .tools.
+[ -z "${BOTWPC_NGX_DIR:-}" ] && [ ! -d "$BIN/ngx" ] && [ -f "${TOOLS%/dotnet}/ngx-bridge/libbotw_ngx_bridge.so" ] && export BOTWPC_NGX_DIR=${TOOLS%/dotnet}/ngx-bridge
+case "${1:-}" in
+  --botw-setup|--botw-mods|--botw-dlc) exec "$BIN/Ryujinx" "$@" ;;
+  *) exec "$BIN/Ryujinx" --botw "$@" ;;
+esac

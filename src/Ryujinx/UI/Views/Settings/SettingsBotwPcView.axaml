@@ -1,0 +1,220 @@
+<UserControl
+    x:Class="Ryujinx.Ava.UI.Views.Settings.SettingsBotwPcView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ext="clr-namespace:Ryujinx.Ava.Common.Markup"
+    xmlns:viewModels="clr-namespace:Ryujinx.Ava.UI.ViewModels"
+    mc:Ignorable="d"
+    x:DataType="viewModels:SettingsViewModel">
+    <Design.DataContext>
+        <viewModels:SettingsViewModel />
+    </Design.DataContext>
+    <ScrollViewer
+        HorizontalAlignment="Stretch"
+        VerticalAlignment="Stretch"
+        HorizontalScrollBarVisibility="Disabled"
+        VerticalScrollBarVisibility="Auto">
+        <Border Classes="settings">
+            <StackPanel Margin="10" Orientation="Vertical" Spacing="10">
+                <TextBlock Classes="h1" Text="{ext:Locale BotwSettingsFrameRateHeader}" />
+                <StackPanel Margin="10,0,0,0" Orientation="Horizontal">
+                    <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsFrameRate}"
+                               ToolTip.Tip="{ext:Locale BotwSettingsFrameRateTooltip}" />
+                    <ComboBox Width="350" SelectedIndex="{Binding BotwFrameRate}" ToolTip.Tip="{ext:Locale BotwSettingsFrameRateTooltip}">
+                        <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsFps30}" /></ComboBoxItem>
+                        <ComboBoxItem><TextBlock Text="60 FPS" /></ComboBoxItem>
+                        <ComboBoxItem><TextBlock Text="90 FPS" /></ComboBoxItem>
+                        <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsFps120}" /></ComboBoxItem>
+                        <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsFpsUncapped}" /></ComboBoxItem>
+                    </ComboBox>
+                </StackPanel>
+                <TextBlock Margin="10,0,0,0" FontSize="12" Opacity="0.7" TextWrapping="Wrap" Text="{ext:Locale BotwSettingsFrameRateTooltip}" />
+
+                <TextBlock Classes="h1" Text="{ext:Locale BotwSettingsControllerHeader}" />
+                <StackPanel Margin="10,0,0,0" Spacing="8">
+                    <CheckBox IsChecked="{Binding BotwPc.Controller.AutoAssign}">
+                        <TextBlock Text="{ext:Locale BotwSettingsAutoAssign}" />
+                    </CheckBox>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsPreferred}" />
+                        <TextBox Width="350" Text="{Binding BotwPc.Controller.Preferred}" Watermark="Xbox" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsLayout}" />
+                        <ComboBox Width="350" SelectedIndex="{Binding BotwLayoutIndex}">
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsLayoutNintendo}" /></ComboBoxItem>
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsLayoutXbox}" /></ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsDeadzoneLeft}" />
+                        <Slider Width="300" Minimum="0" Maximum="0.5" TickFrequency="0.01" IsSnapToTickEnabled="True" Value="{Binding BotwPc.Controller.DeadzoneLeft}" />
+                        <TextBlock VerticalAlignment="Center" Margin="10,0" Text="{Binding BotwPc.Controller.DeadzoneLeft, StringFormat='{}{0:0.00}'}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsDeadzoneRight}" />
+                        <Slider Width="300" Minimum="0" Maximum="0.5" TickFrequency="0.01" IsSnapToTickEnabled="True" Value="{Binding BotwPc.Controller.DeadzoneRight}" />
+                        <TextBlock VerticalAlignment="Center" Margin="10,0" Text="{Binding BotwPc.Controller.DeadzoneRight, StringFormat='{}{0:0.00}'}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsCameraCurve}" />
+                        <Slider Width="300" Minimum="1" Maximum="3" TickFrequency="0.1" IsSnapToTickEnabled="True" Value="{Binding BotwPc.Controller.CameraCurve}" />
+                        <TextBlock VerticalAlignment="Center" Margin="10,0" Text="{Binding BotwPc.Controller.CameraCurve, StringFormat='{}{0:0.0}'}" />
+                    </StackPanel>
+                    <CheckBox IsChecked="{Binding BotwPc.Controller.InvertCameraX}">
+                        <TextBlock Text="{ext:Locale BotwSettingsInvertX}" />
+                    </CheckBox>
+                    <CheckBox IsChecked="{Binding BotwPc.Controller.InvertCameraY}">
+                        <TextBlock Text="{ext:Locale BotwSettingsInvertY}" />
+                    </CheckBox>
+                    <CheckBox IsChecked="{Binding BotwPc.Controller.Rumble}">
+                        <TextBlock Text="{ext:Locale BotwSettingsRumble}" />
+                    </CheckBox>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsRumbleStrength}" />
+                        <Slider Width="300" Minimum="0" Maximum="2" TickFrequency="0.1" IsSnapToTickEnabled="True" Value="{Binding BotwPc.Controller.RumbleStrength}" />
+                        <TextBlock VerticalAlignment="Center" Margin="10,0" Text="{Binding BotwPc.Controller.RumbleStrength, StringFormat='{}{0:0.0}'}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsTriggerThreshold}" />
+                        <Slider Width="300" Minimum="0.05" Maximum="0.95" TickFrequency="0.05" IsSnapToTickEnabled="True" Value="{Binding BotwPc.Controller.TriggerThreshold}" />
+                        <TextBlock VerticalAlignment="Center" Margin="10,0" Text="{Binding BotwPc.Controller.TriggerThreshold, StringFormat='{}{0:0.00}'}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsTriggerHysteresis}" />
+                        <Slider Width="300" Minimum="0" Maximum="0.3" TickFrequency="0.01" IsSnapToTickEnabled="True" Value="{Binding BotwPc.Controller.TriggerHysteresis}" />
+                        <TextBlock VerticalAlignment="Center" Margin="10,0" Text="{Binding BotwPc.Controller.TriggerHysteresis, StringFormat='{}{0:0.00}'}" />
+                    </StackPanel>
+                    <TextBlock FontSize="12" Opacity="0.7" TextWrapping="Wrap" Text="{ext:Locale BotwSettingsControllerNote}" />
+                    <Button HorizontalAlignment="Left" Click="ControllerTest_Click" Content="{ext:Locale BotwSettingsControllerTest}" />
+                </StackPanel>
+
+                <TextBlock Classes="h1" Text="{ext:Locale BotwSettingsGraphicsHeader}" />
+                <StackPanel Margin="10,0,0,0" Spacing="8">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsDlss}" />
+                        <ComboBox Width="350" SelectedIndex="{Binding BotwDlssIndex}">
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsDlssOff}" /></ComboBoxItem>
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsDlssQuality}" /></ComboBoxItem>
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsDlssBalanced}" /></ComboBoxItem>
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsDlssPerformance}" /></ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
+                    <TextBlock FontSize="12" Opacity="0.7" TextWrapping="Wrap" Text="{ext:Locale BotwSettingsDlssNote}" />
+                </StackPanel>
+
+                <TextBlock Classes="h1" Text="{ext:Locale BotwSettingsPromptsHeader}" />
+                <StackPanel Margin="10,0,0,0" Spacing="8">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsPrompts}" />
+                        <ComboBox Width="350" SelectedIndex="{Binding BotwPromptStyleIndex}">
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsPromptsAuto}" /></ComboBoxItem>
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsPromptsXbox}" /></ComboBoxItem>
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsPromptsOriginal}" /></ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsPromptPriority}" />
+                        <ComboBox Width="350" SelectedIndex="{Binding BotwPromptPriorityIndex}">
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsPromptPriorityBuiltIn}" /></ComboBoxItem>
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsPromptPriorityMod}" /></ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
+                    <TextBlock FontSize="12" Opacity="0.7" TextWrapping="Wrap" Text="{ext:Locale BotwSettingsPromptsNote}" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Click="RebuildPrompts_Click" Content="{ext:Locale BotwSettingsPromptsRebuild}" />
+                        <TextBlock VerticalAlignment="Center" FontSize="12" Text="{Binding BotwPromptRebuildStatus}" />
+                    </StackPanel>
+                    <TextBlock Text="{ext:Locale BotwSettingsBindings}" />
+                    <ItemsControl ItemsSource="{Binding BotwBindings}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="viewModels:BotwBindingRow">
+                                <StackPanel Orientation="Horizontal" Margin="0,2,20,2">
+                                    <TextBlock VerticalAlignment="Center" Width="150" Text="{Binding Name}" />
+                                    <ComboBox Width="150" ItemsSource="{x:Static viewModels:BotwBindingRow.Labels}" SelectedIndex="{Binding Selected}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock FontSize="12" Opacity="0.7" TextWrapping="Wrap" Text="{ext:Locale BotwSettingsBindingsNote}" />
+                    <Button HorizontalAlignment="Left" Click="ResetBindings_Click" Content="{ext:Locale BotwSettingsBindingsReset}" />
+                </StackPanel>
+
+                <TextBlock Classes="h1" Text="{ext:Locale BotwSettingsMotionHeader}" />
+                <StackPanel Margin="10,0,0,0" Spacing="8">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsMotionSource}" />
+                        <ComboBox Width="350" SelectedIndex="{Binding BotwMotionSourceIndex}">
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsMotionSourceAuto}" /></ComboBoxItem>
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsMotionSourceReal}" /></ComboBoxItem>
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsMotionSourceVirtual}" /></ComboBoxItem>
+                            <ComboBoxItem><TextBlock Text="{ext:Locale BotwSettingsMotionSourceOff}" /></ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsMotionRate}" />
+                        <Slider Width="300" Minimum="10" Maximum="360" TickFrequency="5" IsSnapToTickEnabled="True" Value="{Binding BotwPc.Motion.RateDegreesPerSecond}" />
+                        <TextBlock VerticalAlignment="Center" Margin="10,0" Text="{Binding BotwPc.Motion.RateDegreesPerSecond, StringFormat='{}{0:0}'}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsMotionFine}" />
+                        <Slider Width="300" Minimum="0.05" Maximum="1" TickFrequency="0.05" IsSnapToTickEnabled="True" Value="{Binding BotwPc.Motion.FineFactor}" />
+                        <TextBlock VerticalAlignment="Center" Margin="10,0" Text="{Binding BotwPc.Motion.FineFactor, StringFormat='{}{0:0.00}'}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="20">
+                        <CheckBox IsChecked="{Binding BotwPc.Motion.InvertPitch}"><TextBlock Text="{ext:Locale BotwSettingsMotionInvertPitch}" /></CheckBox>
+                        <CheckBox IsChecked="{Binding BotwPc.Motion.InvertRoll}"><TextBlock Text="{ext:Locale BotwSettingsMotionInvertRoll}" /></CheckBox>
+                        <CheckBox IsChecked="{Binding BotwPc.Motion.InvertYaw}"><TextBlock Text="{ext:Locale BotwSettingsMotionInvertYaw}" /></CheckBox>
+                    </StackPanel>
+                    <CheckBox IsChecked="{Binding BotwPc.Motion.Keyboard}">
+                        <TextBlock Text="{ext:Locale BotwSettingsMotionKeyboard}" />
+                    </CheckBox>
+                    <TextBlock FontSize="12" Opacity="0.7" Text="{ext:Locale BotwSettingsMotionKeys}" />
+                    <WrapPanel Orientation="Horizontal">
+                        <TextBox Width="95" Margin="0,0,6,6" Text="{Binding BotwPc.Motion.KeyPitchForward}" />
+                        <TextBox Width="95" Margin="0,0,6,6" Text="{Binding BotwPc.Motion.KeyPitchBackward}" />
+                        <TextBox Width="95" Margin="0,0,6,6" Text="{Binding BotwPc.Motion.KeyRollLeft}" />
+                        <TextBox Width="95" Margin="0,0,6,6" Text="{Binding BotwPc.Motion.KeyRollRight}" />
+                        <TextBox Width="95" Margin="0,0,6,6" Text="{Binding BotwPc.Motion.KeyYawLeft}" />
+                        <TextBox Width="95" Margin="0,0,6,6" Text="{Binding BotwPc.Motion.KeyYawRight}" />
+                        <TextBox Width="95" Margin="0,0,6,6" Text="{Binding BotwPc.Motion.KeyRecenter}" />
+                        <TextBox Width="95" Margin="0,0,6,6" Text="{Binding BotwPc.Motion.KeyToggle}" />
+                        <TextBox Width="95" Margin="0,0,6,6" Text="{Binding BotwPc.Motion.KeyFine}" />
+                    </WrapPanel>
+                    <CheckBox IsChecked="{Binding BotwPc.Motion.Controller}">
+                        <TextBlock Text="{ext:Locale BotwSettingsMotionController}" />
+                    </CheckBox>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsMotionHold}" />
+                        <Slider Width="300" Minimum="0.1" Maximum="1" TickFrequency="0.05" IsSnapToTickEnabled="True" Value="{Binding BotwHoldThresholdSeconds}" />
+                        <TextBlock VerticalAlignment="Center" Margin="10,0" Text="{Binding BotwHoldThresholdSeconds, StringFormat='{}{0:0.00}'}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Width="250" Text="{ext:Locale BotwSettingsMotionDeadzone}" />
+                        <Slider Width="300" Minimum="0" Maximum="0.5" TickFrequency="0.01" IsSnapToTickEnabled="True" Value="{Binding BotwPc.Motion.StickDeadzone}" />
+                        <TextBlock VerticalAlignment="Center" Margin="10,0" Text="{Binding BotwPc.Motion.StickDeadzone, StringFormat='{}{0:0.00}'}" />
+                    </StackPanel>
+                    <CheckBox IsChecked="{Binding BotwPc.Motion.ControllerToggle}">
+                        <TextBlock Text="{ext:Locale BotwSettingsMotionToggle}" />
+                    </CheckBox>
+                    <TextBlock FontSize="12" Opacity="0.7" TextWrapping="Wrap" Text="{ext:Locale BotwSettingsMotionNote}" />
+                </StackPanel>
+
+                <TextBlock Classes="h1" Text="{ext:Locale BotwSettingsModsHeader}" />
+                <StackPanel Margin="10,0,0,0" Spacing="8">
+                    <CheckBox IsChecked="{Binding BotwPc.Mods.SafeMode}">
+                        <TextBlock Text="{ext:Locale BotwModSafeMode}" />
+                    </CheckBox>
+                    <TextBlock FontSize="12" Opacity="0.7" TextWrapping="Wrap" Text="{ext:Locale BotwSettingsModsNote}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,12 @@
+{
+  "label": "s1-unbounded",
+  "frames": 2454,
+  "duration_s": 47.933,
+  "avg_fps": 51.2,
+  "median_fps": 52.66,
+  "one_pct_low_fps": 30.1,
+  "p99_ms": 30.388,
+  "max_ms": 42.669,
+  "stutters_2x_median": 3,
+  "fifo_pct_mean": 63.52
+}

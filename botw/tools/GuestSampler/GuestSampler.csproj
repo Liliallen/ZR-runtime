@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Not part of the emulator build: stand-alone diagnostic tool (botw/tools/GuestSampler/README in Program.cs). -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MIT; resolves managed (CoreCLR JIT) instruction pointers to methods for the managed option. -->
+    <PackageReference Include="Microsoft.Diagnostics.Runtime" Version="3.1.512801" />
+    <!-- MIT; disassembles the hot JIT methods for the managed option. -->
+    <PackageReference Include="Iced" Version="1.21.0" />
+  </ItemGroup>
+
+</Project>

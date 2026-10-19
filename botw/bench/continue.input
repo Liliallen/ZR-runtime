@@ -1,0 +1,12 @@
+# Title screen -> "Continue" -> confirm "load this data?" -> idle in the Shrine of Resurrection.
+# A is pressed repeatedly so the sequence also works when the title runs faster (e.g. VSync unbounded);
+# extra presses in-game do nothing while Link stands idle away from interactables.
+# start_s dur buttons
+25  0.2 A
+28  0.2 A
+31  0.2 A
+34  0.2 A
+37  0.2 A
+40  0.2 A
+43  0.2 A
+46  0.2 A

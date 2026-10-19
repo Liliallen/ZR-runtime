@@ -1,0 +1,50 @@
+[
+ {
+  "thread": "HLE.GuestThread",
+  "cpu_pct": 224.5
+ },
+ {
+  "thread": "GUI.RenderThrea",
+  "cpu_pct": 83.1
+ },
+ {
+  "thread": "GPU.MainThread",
+  "cpu_pct": 81.7
+ },
+ {
+  "thread": "HLE.TimeManager",
+  "cpu_pct": 5.2
+ },
+ {
+  "thread": "AudioProcessor.",
+  "cpu_pct": 3.4
+ },
+ {
+  "thread": "Ryujinx",
+  "cpu_pct": 3.3
+ },
+ {
+  "thread": ".NET TP Worker",
+  "cpu_pct": 3.2
+ },
+ {
+  "thread": "AudioRendererMa",
+  "cpu_pct": 2.6
+ },
+ {
+  "thread": "Common.Nanoslee",
+  "cpu_pct": 2.5
+ },
+ {
+  "thread": "HLE.OsThread.4",
+  "cpu_pct": 1.9
+ },
+ {
+  "thread": "HLE.OsThread.11",
+  "cpu_pct": 1.9
+ },
+ {
+  "thread": "GUI.WindowThrea",
+  "cpu_pct": 1.2
+ }
+]

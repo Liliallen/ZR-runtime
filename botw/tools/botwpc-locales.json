@@ -1,0 +1,447 @@
+{
+  "BotwModInstallFile": {
+    "en_US": "Install .zip…",
+    "zh_TW": "安裝 .zip…",
+    "zh_CN": "安装 .zip…"
+  },
+  "BotwModInstallFolder": {
+    "en_US": "Install folder…",
+    "zh_TW": "安裝資料夾…",
+    "zh_CN": "安装文件夹…"
+  },
+  "BotwModProfile": {
+    "en_US": "Profile",
+    "zh_TW": "設定檔",
+    "zh_CN": "配置"
+  },
+  "BotwModApplyProfile": {
+    "en_US": "Apply",
+    "zh_TW": "套用",
+    "zh_CN": "应用"
+  },
+  "BotwModSaveCustom": {
+    "en_US": "Save as Custom",
+    "zh_TW": "儲存為自訂",
+    "zh_CN": "保存为自定义"
+  },
+  "BotwModSafeMode": {
+    "en_US": "Safe mode: start games without any mods",
+    "zh_TW": "安全模式：啟動遊戲時不載入任何模組",
+    "zh_CN": "安全模式：启动游戏时不加载任何模组"
+  },
+  "BotwModConflicts": {
+    "en_US": "{0} file conflicts ({1} need a UKMM merge). The mod higher in the list wins.",
+    "zh_TW": "{0} 個檔案衝突（其中 {1} 個需要用 UKMM 合併）。清單中位置較高的模組優先。",
+    "zh_CN": "{0} 个文件冲突（其中 {1} 个需要用 UKMM 合并）。列表中位置较高的模组优先。"
+  },
+  "BotwModNoConflicts": {
+    "en_US": "No file conflicts between enabled mods.",
+    "zh_TW": "已啟用的模組之間沒有檔案衝突。",
+    "zh_CN": "已启用的模组之间没有文件冲突。"
+  },
+  "BotwModShowConflicts": {
+    "en_US": "Details",
+    "zh_TW": "詳細資料",
+    "zh_CN": "详细信息"
+  },
+  "BotwModConflictsTitle": {
+    "en_US": "Mod conflicts",
+    "zh_TW": "模組衝突",
+    "zh_CN": "模组冲突"
+  },
+  "BotwModMoveUp": {
+    "en_US": "Higher priority",
+    "zh_TW": "提高優先順序",
+    "zh_CN": "提高优先级"
+  },
+  "BotwModMoveDown": {
+    "en_US": "Lower priority",
+    "zh_TW": "降低優先順序",
+    "zh_CN": "降低优先级"
+  },
+  "BotwModUpdatePrompt": {
+    "en_US": "A mod named '{0}' is already installed. Replace it with this version? The current files are kept as a backup.",
+    "zh_TW": "已安裝名為「{0}」的模組。要用這個版本取代嗎？目前的檔案會保留為備份。",
+    "zh_CN": "已安装名为“{0}”的模组。要用这个版本替换吗？当前文件会保留为备份。"
+  },
+  "BotwModInstallFailed": {
+    "en_US": "The mod was not installed.",
+    "zh_TW": "模組未安裝。",
+    "zh_CN": "模组未安装。"
+  },
+  "BotwModInstalledWithWarnings": {
+    "en_US": "Installed '{0}' with warnings.",
+    "zh_TW": "已安裝「{0}」，但有警告。",
+    "zh_CN": "已安装“{0}”，但有警告。"
+  },
+  "BotwModGameRunning": {
+    "en_US": "Stop the game before installing or removing mods.",
+    "zh_TW": "請先停止遊戲再安裝或移除模組。",
+    "zh_CN": "请先停止游戏再安装或移除模组。"
+  },
+  "BotwModNeedsDlc": {
+    "en_US": "needs DLC {0}",
+    "zh_TW": "需要 DLC {0}",
+    "zh_CN": "需要 DLC {0}"
+  },
+  "BotwModRestore": {
+    "en_US": "Restore backup…",
+    "zh_TW": "還原備份…",
+    "zh_CN": "还原备份…"
+  },
+  "BotwModRestorePrompt": {
+    "en_US": "Name of the mod to restore from its latest backup (undoes the last update or removal):",
+    "zh_TW": "要從最新備份還原的模組名稱（復原上一次的更新或移除）：",
+    "zh_CN": "要从最新备份还原的模组名称（撤销上一次的更新或移除）："
+  },
+  "BotwModRemovedToBackup": {
+    "en_US": "Removed. The files were moved to the backup folder and can be restored.",
+    "zh_TW": "已移除。檔案已移到備份資料夾，可以還原。",
+    "zh_CN": "已移除。文件已移到备份文件夹，可以还原。"
+  },
+  "BotwDlcVerify": {
+    "en_US": "Verify DLC",
+    "zh_TW": "驗證 DLC",
+    "zh_CN": "验证 DLC"
+  },
+  "BotwDlcVerifying": {
+    "en_US": "Verifying every block of the add-on content…",
+    "zh_TW": "正在逐塊驗證追加內容…",
+    "zh_CN": "正在逐块验证追加内容…"
+  },
+  "BotwDlcVerified": {
+    "en_US": "verified: {0} files, {1:F1} MiB, all hashes valid",
+    "zh_TW": "驗證通過：{0} 個檔案，{1:F1} MiB，雜湊全部正確",
+    "zh_CN": "验证通过：{0} 个文件，{1:F1} MiB，哈希全部正确"
+  },
+  "BotwDlcVerifyFailed": {
+    "en_US": "VERIFY FAILED:",
+    "zh_TW": "驗證失敗：",
+    "zh_CN": "验证失败："
+  },
+  "BotwSettingsTab": {
+    "en_US": "BotW-PC",
+    "zh_TW": "BotW-PC",
+    "zh_CN": "BotW-PC"
+  },
+  "BotwSettingsFrameRateHeader": {
+    "en_US": "Breath of the Wild frame rate",
+    "zh_TW": "曠野之息 幀率",
+    "zh_CN": "旷野之息 帧率"
+  },
+  "BotwSettingsFrameRate": {
+    "en_US": "Frame rate",
+    "zh_TW": "幀率",
+    "zh_CN": "帧率"
+  },
+  "BotwSettingsFrameRateTooltip": {
+    "en_US": "Sets the emulated refresh rate (VSync / custom refresh). BotW 1.6.0 keeps real-time game speed at every setting. 120 FPS is experimental and may not be reached in demanding scenes; the display shows at most its own refresh rate. Other 30-FPS games are affected the same way.",
+    "zh_TW": "設定模擬的刷新率（垂直同步／自訂刷新率）。BotW 1.6.0 在每個設定下都維持正確的遊戲速度。120 FPS 為實驗性，負載高的場景可能達不到；螢幕最多只能顯示它自己的刷新率。其他 30 FPS 的遊戲也會受到同樣影響。",
+    "zh_CN": "设置模拟的刷新率（垂直同步／自定义刷新率）。BotW 1.6.0 在每个设置下都保持正确的游戏速度。120 FPS 为实验性，高负载场景可能达不到；显示器最多只能显示它自己的刷新率。其他 30 FPS 的游戏也会受到同样影响。"
+  },
+  "BotwSettingsFps30": {
+    "en_US": "30 FPS (original)",
+    "zh_TW": "30 FPS（原版）",
+    "zh_CN": "30 FPS（原版）"
+  },
+  "BotwSettingsFps120": {
+    "en_US": "120 FPS (experimental)",
+    "zh_TW": "120 FPS（實驗性）",
+    "zh_CN": "120 FPS（实验性）"
+  },
+  "BotwSettingsFpsUncapped": {
+    "en_US": "Uncapped (may tear)",
+    "zh_TW": "不限幀（可能畫面撕裂）",
+    "zh_CN": "不限帧（可能画面撕裂）"
+  },
+  "BotwSettingsControllerHeader": {
+    "en_US": "Controller",
+    "zh_TW": "手把",
+    "zh_CN": "手柄"
+  },
+  "BotwSettingsAutoAssign": {
+    "en_US": "Use a connected controller automatically when Player 1 has none",
+    "zh_TW": "玩家 1 沒有已連接的手把時，自動使用已連接的手把",
+    "zh_CN": "玩家 1 没有已连接的手柄时，自动使用已连接的手柄"
+  },
+  "BotwSettingsPreferred": {
+    "en_US": "Preferred controller (name contains)",
+    "zh_TW": "優先使用的手把（名稱包含）",
+    "zh_CN": "优先使用的手柄（名称包含）"
+  },
+  "BotwSettingsLayout": {
+    "en_US": "Face button layout",
+    "zh_TW": "按鍵配置",
+    "zh_CN": "按键布局"
+  },
+  "BotwSettingsLayoutNintendo": {
+    "en_US": "Nintendo positions (Xbox A = Switch B)",
+    "zh_TW": "任天堂位置（Xbox A = Switch B）",
+    "zh_CN": "任天堂位置（Xbox A = Switch B）"
+  },
+  "BotwSettingsLayoutXbox": {
+    "en_US": "Xbox labels (Xbox A = Switch A)",
+    "zh_TW": "Xbox 標示（Xbox A = Switch A）",
+    "zh_CN": "Xbox 标示（Xbox A = Switch A）"
+  },
+  "BotwSettingsDeadzoneLeft": {
+    "en_US": "Left stick deadzone",
+    "zh_TW": "左搖桿死區",
+    "zh_CN": "左摇杆死区"
+  },
+  "BotwSettingsDeadzoneRight": {
+    "en_US": "Right stick deadzone",
+    "zh_TW": "右搖桿死區",
+    "zh_CN": "右摇杆死区"
+  },
+  "BotwSettingsCameraCurve": {
+    "en_US": "Camera response curve",
+    "zh_TW": "鏡頭反應曲線",
+    "zh_CN": "镜头响应曲线"
+  },
+  "BotwSettingsInvertX": {
+    "en_US": "Invert camera horizontally",
+    "zh_TW": "鏡頭水平反轉",
+    "zh_CN": "镜头水平反转"
+  },
+  "BotwSettingsInvertY": {
+    "en_US": "Invert camera vertically",
+    "zh_TW": "鏡頭垂直反轉",
+    "zh_CN": "镜头垂直反转"
+  },
+  "BotwSettingsRumble": {
+    "en_US": "Rumble",
+    "zh_TW": "震動",
+    "zh_CN": "震动"
+  },
+  "BotwSettingsRumbleStrength": {
+    "en_US": "Rumble strength",
+    "zh_TW": "震動強度",
+    "zh_CN": "震动强度"
+  },
+  "BotwSettingsControllerNote": {
+    "en_US": "Applies to automatically assigned controllers when a game starts or a controller is reconnected (the camera curve applies immediately). Controllers configured in Input settings keep their own mapping.",
+    "zh_TW": "套用到自動指派的手把，於遊戲啟動或手把重新連接時生效（鏡頭曲線立即生效）。在「輸入」設定中手動設定的手把維持原本的對應。",
+    "zh_CN": "应用于自动分配的手柄，在游戏启动或手柄重新连接时生效（镜头曲线立即生效）。在“输入”设置中手动配置的手柄保持原有映射。"
+  },
+  "BotwSettingsModsHeader": {
+    "en_US": "Mods",
+    "zh_TW": "模組",
+    "zh_CN": "模组"
+  },
+  "BotwSettingsModsNote": {
+    "en_US": "Install, order and profiles: right click the game → Manage Mods. DLC: right click the game → Manage DLC.",
+    "zh_TW": "安裝、順序與設定檔：在遊戲上按右鍵 → 管理模組。DLC：在遊戲上按右鍵 → 管理 DLC。",
+    "zh_CN": "安装、顺序与配置：在游戏上右键 → 管理模组。DLC：在游戏上右键 → 管理 DLC。"
+  },
+  "BotwSettingsTriggerThreshold": {
+    "en_US": "Trigger press threshold",
+    "zh_TW": "扳機按下門檻",
+    "zh_CN": "扳机按下阈值"
+  },
+  "BotwSettingsTriggerHysteresis": {
+    "en_US": "Trigger release hysteresis",
+    "zh_TW": "扳機放開遲滯",
+    "zh_CN": "扳机松开迟滞"
+  },
+  "BotwSettingsControllerTest": {
+    "en_US": "Controller test…",
+    "zh_TW": "控制器測試…",
+    "zh_CN": "控制器测试…"
+  },
+  "BotwSettingsPromptsHeader": {
+    "en_US": "Button prompts",
+    "zh_TW": "按鍵提示",
+    "zh_CN": "按键提示"
+  },
+  "BotwSettingsPrompts": {
+    "en_US": "In-game button glyphs",
+    "zh_TW": "遊戲內按鍵圖示",
+    "zh_CN": "游戏内按键图标"
+  },
+  "BotwSettingsPromptsAuto": {
+    "en_US": "Automatic (Xbox glyphs for Xbox-style controllers)",
+    "zh_TW": "自動（Xbox 類控制器顯示 Xbox 圖示）",
+    "zh_CN": "自动（Xbox 类控制器显示 Xbox 图标）"
+  },
+  "BotwSettingsPromptsXbox": {
+    "en_US": "Always Xbox glyphs",
+    "zh_TW": "一律顯示 Xbox 圖示",
+    "zh_CN": "始终显示 Xbox 图标"
+  },
+  "BotwSettingsPromptsOriginal": {
+    "en_US": "The game's own glyphs",
+    "zh_TW": "遊戲原本的圖示",
+    "zh_CN": "游戏原本的图标"
+  },
+  "BotwSettingsPromptPriority": {
+    "en_US": "When a mod also changes the glyphs",
+    "zh_TW": "Mod 也修改按鍵圖示時",
+    "zh_CN": "Mod 也修改按键图标时"
+  },
+  "BotwSettingsPromptPriorityBuiltIn": {
+    "en_US": "Use BOTW-PC glyphs (always match the mapping)",
+    "zh_TW": "使用 BOTW-PC 圖示（永遠符合對映）",
+    "zh_CN": "使用 BOTW-PC 图标（始终符合映射）"
+  },
+  "BotwSettingsPromptPriorityMod": {
+    "en_US": "Use the mod's glyphs",
+    "zh_TW": "使用 Mod 的圖示",
+    "zh_CN": "使用 Mod 的图标"
+  },
+  "BotwSettingsPromptsNote": {
+    "en_US": "Each prompt shows the controller button bound to that Switch button. Glyphs are generated when the game starts; restart the game after changing the mapping.",
+    "zh_TW": "每個提示顯示綁定到該 Switch 按鍵的實體按鍵。圖示在遊戲啟動時產生；變更對映後請重新啟動遊戲。",
+    "zh_CN": "每个提示显示绑定到该 Switch 按键的实体按键。图标在游戏启动时生成；更改映射后请重新启动游戏。"
+  },
+  "BotwSettingsBindings": {
+    "en_US": "Custom bindings (automatic controller configuration)",
+    "zh_TW": "自訂按鍵（自動控制器設定）",
+    "zh_CN": "自定义按键（自动控制器配置）"
+  },
+  "BotwSettingsBindingsNote": {
+    "en_US": "Applied after the layout above. A controller configured in Settings > Input uses that configuration instead; prompts follow whichever configuration runs.",
+    "zh_TW": "在上方配置之後套用。若已在「設定 > 輸入」為該控制器存檔設定，則改用那份設定；提示永遠跟隨實際生效的設定。",
+    "zh_CN": "在上方布局之后应用。若已在“设置 > 输入”为该控制器保存配置，则改用该配置；提示始终跟随实际生效的配置。"
+  },
+  "BotwSettingsBindingsReset": {
+    "en_US": "Reset bindings",
+    "zh_TW": "重設按鍵",
+    "zh_CN": "重置按键"
+  },
+  "BotwSettingsMotionHeader": {
+    "en_US": "Motion controls",
+    "zh_TW": "體感操作",
+    "zh_CN": "体感操作"
+  },
+  "BotwSettingsMotionSource": {
+    "en_US": "Motion source",
+    "zh_TW": "體感來源",
+    "zh_CN": "体感来源"
+  },
+  "BotwSettingsMotionSourceAuto": {
+    "en_US": "Automatic (controller sensors, else virtual)",
+    "zh_TW": "自動（有陀螺儀用陀螺儀，否則虛擬）",
+    "zh_CN": "自动（有陀螺仪用陀螺仪，否则虚拟）"
+  },
+  "BotwSettingsMotionSourceReal": {
+    "en_US": "Controller sensors only",
+    "zh_TW": "只用控制器感應器",
+    "zh_CN": "仅用控制器传感器"
+  },
+  "BotwSettingsMotionSourceVirtual": {
+    "en_US": "Virtual motion only",
+    "zh_TW": "只用虛擬體感",
+    "zh_CN": "仅用虚拟体感"
+  },
+  "BotwSettingsMotionSourceOff": {
+    "en_US": "Off",
+    "zh_TW": "關閉",
+    "zh_CN": "关闭"
+  },
+  "BotwSettingsMotionRate": {
+    "en_US": "Rotation speed (°/s)",
+    "zh_TW": "旋轉速度（°/秒）",
+    "zh_CN": "旋转速度（°/秒）"
+  },
+  "BotwSettingsMotionFine": {
+    "en_US": "Fine adjustment factor",
+    "zh_TW": "微調倍率",
+    "zh_CN": "微调倍率"
+  },
+  "BotwSettingsMotionInvertPitch": {
+    "en_US": "Invert pitch",
+    "zh_TW": "反轉俯仰",
+    "zh_CN": "反转俯仰"
+  },
+  "BotwSettingsMotionInvertRoll": {
+    "en_US": "Invert roll",
+    "zh_TW": "反轉翻滾",
+    "zh_CN": "反转翻滚"
+  },
+  "BotwSettingsMotionInvertYaw": {
+    "en_US": "Invert yaw",
+    "zh_TW": "反轉偏航",
+    "zh_CN": "反转偏航"
+  },
+  "BotwSettingsMotionKeyboard": {
+    "en_US": "Keyboard virtual motion (the toggle key turns it on and off)",
+    "zh_TW": "鍵盤虛擬體感（切換鍵開關）",
+    "zh_CN": "键盘虚拟体感（切换键开关）"
+  },
+  "BotwSettingsMotionKeys": {
+    "en_US": "Keys: pitch forward, pitch back, roll left, roll right, yaw left, yaw right, recenter, toggle, fine",
+    "zh_TW": "按鍵：前傾、後仰、左翻、右翻、左轉、右轉、回正、切換、微調",
+    "zh_CN": "按键：前倾、后仰、左翻、右翻、左转、右转、回正、切换、微调"
+  },
+  "BotwSettingsMotionController": {
+    "en_US": "Controller virtual motion: hold View, then right stick tilts, LB/RB turn, R3 recenters, LT = fine",
+    "zh_TW": "控制器虛擬體感：按住 View，右搖桿傾斜、LB/RB 旋轉、R3 回正、LT 微調",
+    "zh_CN": "控制器虚拟体感：按住 View，右摇杆倾斜、LB/RB 旋转、R3 回正、LT 微调"
+  },
+  "BotwSettingsMotionHold": {
+    "en_US": "View hold time (s)",
+    "zh_TW": "View 長按時間（秒）",
+    "zh_CN": "View 长按时间（秒）"
+  },
+  "BotwSettingsMotionDeadzone": {
+    "en_US": "Stick deadzone",
+    "zh_TW": "搖桿死區",
+    "zh_CN": "摇杆死区"
+  },
+  "BotwSettingsMotionToggle": {
+    "en_US": "A long View press toggles motion mode (one-handed)",
+    "zh_TW": "長按 View 切換體感模式（單手操作）",
+    "zh_CN": "长按 View 切换体感模式（单手操作）"
+  },
+  "BotwSettingsMotionNote": {
+    "en_US": "A short View press is still Switch −. The game receives simulated gyroscope and accelerometer data; inputs used for motion are hidden from the game until released.",
+    "zh_TW": "短按 View 仍是 Switch −。遊戲收到的是模擬的陀螺儀與加速度計資料；用於體感的按鍵在放開前不會傳給遊戲。",
+    "zh_CN": "短按 View 仍是 Switch −。游戏收到的是模拟的陀螺仪与加速度计数据；用于体感的按键在松开前不会传给游戏。"
+  },
+  "BotwSettingsPromptsRebuild": {
+    "en_US": "Rebuild prompt glyphs",
+    "zh_TW": "重新產生按鍵圖示",
+    "zh_CN": "重新生成按键图标"
+  },
+  "BotwSettingsPromptsRebuildDone": {
+    "en_US": "The prompt glyphs will be regenerated at the next game start.",
+    "zh_TW": "下次啟動遊戲時會重新產生按鍵圖示。",
+    "zh_CN": "下次启动游戏时会重新生成按键图标。"
+  },
+  "BotwSettingsGraphicsHeader": {
+    "en_US": "Graphics",
+    "zh_TW": "圖形",
+    "zh_CN": "图形"
+  },
+  "BotwSettingsDlss": {
+    "en_US": "NVIDIA DLSS (experimental)",
+    "zh_TW": "NVIDIA DLSS（實驗性）",
+    "zh_CN": "NVIDIA DLSS（实验性）"
+  },
+  "BotwSettingsDlssOff": {
+    "en_US": "Off (game's own upscale)",
+    "zh_TW": "關閉（遊戲原本的放大）",
+    "zh_CN": "关闭（游戏原本的放大）"
+  },
+  "BotwSettingsDlssQuality": {
+    "en_US": "Quality",
+    "zh_TW": "品質",
+    "zh_CN": "质量"
+  },
+  "BotwSettingsDlssBalanced": {
+    "en_US": "Balanced",
+    "zh_TW": "平衡",
+    "zh_CN": "平衡"
+  },
+  "BotwSettingsDlssPerformance": {
+    "en_US": "Performance",
+    "zh_TW": "效能",
+    "zh_CN": "性能"
+  },
+  "BotwSettingsDlssNote": {
+    "en_US": "Replaces the game's 900p→1080p upscale with DLSS on NVIDIA RTX GPUs; anything else keeps the game's upscale. BotW chooses its own render resolution, so the modes only select the DLSS preset (DLAA does not apply). Known issue: a faint trail behind Link during fast camera turns. Takes effect at the next game start.",
+    "zh_TW": "在 NVIDIA RTX 顯示卡上以 DLSS 取代遊戲原本的 900p→1080p 放大；其他顯示卡維持遊戲原本的放大。BotW 自行決定渲染解析度，所以這些模式只切換 DLSS 的預設（不適用 DLAA）。已知問題：快速轉動鏡頭時 Link 身後會有淡淡的殘影。下次啟動遊戲時生效。",
+    "zh_CN": "在 NVIDIA RTX 显卡上以 DLSS 取代游戏原本的 900p→1080p 放大；其他显卡保持游戏原本的放大。BotW 自行决定渲染分辨率，所以这些模式只切换 DLSS 的预设（不适用 DLAA）。已知问题：快速转动镜头时 Link 身后会有淡淡的残影。下次启动游戏时生效。"
+  }
+}

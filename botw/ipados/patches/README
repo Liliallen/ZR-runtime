@@ -1,0 +1,8 @@
+moltenvk-1.2.0-shader-cache-memory.patch: MoltenVK 1.2.0 (KhronosGroup/MoltenVK v1.2.0) for the iPadOS build. The shader
+library cache keeps only the used part of each conversion configuration (what matches()/alignWith() read). macOS S1:
+footprint 8579 -> 7891 MB, unique dirty 5905 -> 5212 MB, FPS unchanged (44.4 vs 46.2 median, 200-270 s).
+Apply: git -C MoltenVK-1.2.0 apply <patch>, then fetchDependencies --ios and the "MoltenVK Package (iOS only)" scheme.
+
+moltenvk-1.2.0-ios-argument-buffers.patch: MoltenVK 1.2.0 disables descriptor-set argument buffers on iOS, so Metal's 31
+buffer slots overflow ("'buffer' attribute out of bounds 0..30", then an AGX bindVertexBuffer crash on the M1). Enables
+them for Tier 2 devices (A13/M1+). Required on the iPad; apply together with the shader cache patch.

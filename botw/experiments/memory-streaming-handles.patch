@@ -1,0 +1,122 @@
+diff --git a/src/Ryujinx.Memory/Tracking/RegionHandle.cs b/src/Ryujinx.Memory/Tracking/RegionHandle.cs
+index f0edee3fc..2225cd2a3 100644
+--- a/src/Ryujinx.Memory/Tracking/RegionHandle.cs
++++ b/src/Ryujinx.Memory/Tracking/RegionHandle.cs
+@@ -64,6 +64,23 @@ namespace Ryujinx.Memory.Tracking
+         private int _volatileCount = 0;
+         private bool _volatile;
+ 
++        // BOTW-PC Memory V2 (frame-adaptive streaming, MEMORY_TRACKING_V2.md): frame of the last re-arm, number of
++        // consecutive frames with a re-arm, and the frame until which this handle stays unprotected and dirty.
++        private int _lastRearmFrame = int.MinValue;
++        private int _rearmStreak;
++        private int _streamingUntil = int.MinValue;
++
++        /// <summary>Consecutive frames in which a handle is written again after being re-armed before it streams.</summary>
++        internal const int StreamingStreak = 4;
++
++        /// <summary>Frames a streaming handle stays unprotected (always dirty) before write tracking is tried again.</summary>
++        internal const int StreamingFrames = 60;
++
++        private static readonly Ryujinx.Common.BotwPc.AbPhase.Switch _streamingSwitch = new("BOTWPC_MEM_STREAMING");
++
++        /// <summary>Memory V2 streaming handles: selected at startup (runtime.memory_tracking), A/B-switchable.</summary>
++        internal static bool StreamingEnabled => Ryujinx.Common.BotwPc.RuntimeV2.MemoryV2 && _streamingSwitch.IsOn;
++
+         internal MemoryPermission RequiredPermission
+         {
+             get
+@@ -235,6 +252,8 @@ namespace Ryujinx.Memory.Tracking
+         {
+             _volatileCount = 0;
+             _volatile = false;
++            _rearmStreak = 0;
++            _streamingUntil = int.MinValue;
+         }
+ 
+         /// <summary>
+@@ -303,6 +322,11 @@ namespace Ryujinx.Memory.Tracking
+                 Dirty = true;
+                 if (!oldDirty)
+                 {
++                    if (Ryujinx.Common.BotwPc.GpuCounters.Detailed)
++                    {
++                        CountByKind(Ryujinx.Common.BotwPc.GpuCounters.Id.DirtyBuffer);
++                    }
++
+                     OnDirty?.Invoke();
+                 }
+ 
+@@ -348,6 +372,25 @@ namespace Ryujinx.Memory.Tracking
+         {
+             if (_volatile)
+             {
++                if (Ryujinx.Common.BotwPc.GpuCounters.Detailed)
++                {
++                    CountByKind(Ryujinx.Common.BotwPc.GpuCounters.Id.VolatileBuffer);
++                }
++
++                return;
++            }
++
++            // Memory V2: a streaming handle is not re-armed. It keeps its dirty flag (every check reports it modified,
++            // so every consumer copies its data), which is the conservative state: no write can be missed. Guest writes
++            // to it no longer fault and the consumer no longer changes the page protection.
++            if (_streamingUntil != int.MinValue && _preAction == null && StreamingEnabled &&
++                Ryujinx.Common.BotwPc.TimelineTrace.Frame < _streamingUntil)
++            {
++                if (Ryujinx.Common.BotwPc.GpuCounters.Detailed)
++                {
++                    CountByKind(Ryujinx.Common.BotwPc.GpuCounters.Id.StreamBuffer);
++                }
++
+                 return;
+             }
+ 
+@@ -363,6 +406,30 @@ namespace Ryujinx.Memory.Tracking
+                 }
+             }
+ 
++            if (protectionChanged && Ryujinx.Common.BotwPc.GpuCounters.Detailed)
++            {
++                CountByKind(Ryujinx.Common.BotwPc.GpuCounters.Id.RearmBuffer);
++            }
++
++            if (protectionChanged && !asDirty)
++            {
++                // Memory V2: a handle that had to be re-armed (it was written since the last re-arm) in several
++                // consecutive frames is written every frame; re-arming it only buys a write fault next frame.
++                int frame = Ryujinx.Common.BotwPc.TimelineTrace.Frame;
++
++                if (frame != _lastRearmFrame)
++                {
++                    _rearmStreak = frame == _lastRearmFrame + 1 ? _rearmStreak + 1 : 1;
++                    _lastRearmFrame = frame;
++
++                    if (_rearmStreak >= StreamingStreak && _preAction == null && StreamingEnabled)
++                    {
++                        _streamingUntil = frame + StreamingFrames;
++                        _rearmStreak = 0;
++                    }
++                }
++            }
++
+             if (!protectionChanged)
+             {
+                 // Counteract the check count being incremented when this handle was forced dirty.
+@@ -389,6 +456,15 @@ namespace Ryujinx.Memory.Tracking
+             }
+         }
+ 
++        /// <summary>BOTW-PC diagnostics: counts an event for this handle's resource kind (1 buffer, 2 texture, 3 pool).</summary>
++        private void CountByKind(Ryujinx.Common.BotwPc.GpuCounters.Id bufferId)
++        {
++            if (Id is >= 1 and <= 3)
++            {
++                Ryujinx.Common.BotwPc.GpuCounters.Add(bufferId + (Id - 1));
++            }
++        }
++
+         /// <summary>
+         /// Consume the dirty flag for this handle, and reprotect so it can be set on the next write.
+         /// </summary>

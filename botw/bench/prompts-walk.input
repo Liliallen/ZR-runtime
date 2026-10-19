@@ -1,0 +1,16 @@
+# Load the save (see continue.input), walk around the Shrine of Resurrection start room so context prompts
+# appear (screenshots every few seconds), then open the pause menu (+). For checking in-game prompt glyphs.
+# start_s dur buttons [lx ly rx ry]
+25  0.2 A
+28  0.2 A
+31  0.2 A
+34  0.2 A
+37  0.2 A
+40  0.2 A
+43  0.2 A
+46  0.2 A
+70  2.0 -  0 -32767 0 0
+75  2.0 -  0 32767 0 0
+80  2.0 -  0 32767 0 0
+85  2.0 -  32767 0 0 0
+95  0.2 Plus

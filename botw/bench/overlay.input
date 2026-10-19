@@ -1,0 +1,28 @@
+# In-game overlay test (progressed save): L3+R3 opens, D-pad/RB navigate, Right changes values, L3+R3 closes;
+# Insert / arrows / PageDown / Escape with the keyboard; finally a single L3 tap must still reach the game (crouch).
+# pad = physical Xbox buttons seen by the overlay; key = keyboard keys for the overlay.
+25  0.2 A
+28  0.2 A
+31  0.2 A
+34  0.2 A
+37  0.2 A
+40  0.2 A
+43  0.2 A
+46  0.2 A
+62   0.15 pad LS+RS
+64   0.1  pad Down
+65   0.1  pad Down
+66   0.1  pad Right
+67   0.1  pad Left
+68   0.1  pad RB
+69   0.1  pad RB
+70   0.1  pad Right
+71   0.1  pad Right
+73   0.15 pad LS+RS
+78   0.2  key Insert
+80   0.1  key Down
+81   0.1  key PageDown
+82   0.1  key PageDown
+83   0.1  key PageDown
+85   0.2  key Escape
+90   0.05 pad LS
