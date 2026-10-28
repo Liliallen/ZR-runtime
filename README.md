@@ -11,7 +11,7 @@ files, keys, firmware or artwork. See [Legal](#legal) before using it.
 
 | Platform | Graphics | Measured result (1.6.0, the author's own save) |
 |---|---|---|
-| Windows x64 | Vulkan | 60 / 90 FPS at full game speed; the 120 FPS mode reaches about 90 outdoors |
+| Windows x64 | Vulkan | 60 / 90 FPS at full game speed; the 120 FPS mode reaches about 90 outdoors; with DLSS Frame Generation 2x, ~80 game FPS → ~160 shown (RTX 5070 Ti) |
 | Linux x64 | Vulkan | same code as Windows; earlier rounds measured, the latest round not yet re-measured |
 | macOS (Apple Silicon) | Vulkan → MoltenVK → Metal | median 50–55 FPS on an M4 MacBook Air |
 | iPadOS (M1 iPad) | Vulkan → MoltenVK → Metal, no JIT | 30 FPS; drops to 24–27 FPS after 8–17 minutes when the iPad gets hot |
@@ -22,9 +22,20 @@ software keeps the stock Ryujinx behaviour.
 ## What the fork adds
 
 - Frame-rate modes (30 / 60 / 90 / 120) with corrected game speed and UI timing.
-- Vulkan and GPU front-end optimizations (fence pool, buffer lookup cache, readback sync).
-- Xbox controller auto-assignment, button-prompt layouts, custom bindings, a virtual gyroscope.
-- In-game overlay menu (L3 + R3): graphics, frame rate, performance HUD, controller, mods.
+- High-frame-rate gameplay fixes: stamina regeneration, map cursor, shield surfing, bow slow motion, Flurry Rush and
+  Korok timers are scaled to the real frame time, so they behave as at 30 FPS
+  (`BOTWPC_FRAME_FIXES=0` turns them off; [`KNOWN_ISSUES.md`](botw/docs/KNOWN_ISSUES.md) #4).
+- Videos (memories, story movies) play at the console's 30 FPS, then the chosen frame rate returns (`BOTWPC_VIDEO_30FPS=0` turns it off).
+- NVIDIA DLSS Super Resolution and, new, DLSS Frame Generation 2x / 3x / 4x through Streamline (Windows, RTX 40/50,
+  experimental, off by default): [`DLSS_FRAME_GENERATION.md`](botw/docs/DLSS_FRAME_GENERATION.md).
+- Runtime V2 / V3 (selectable per component, experimental): reworked CPU JIT, GPU front end, memory tracking and HLE
+  scheduler; V2 is checked against the original with differential tests.
+- Vulkan and GPU front-end optimizations (fence pool, buffer lookup cache, readback sync). The world-load stall and GPU
+  reset on NVIDIA drivers is fixed (host import of texture flush buffers is off; `KNOWN_ISSUES.md` #44).
+- Xbox controller auto-assignment, button-prompt layouts, custom bindings, a virtual gyroscope. The prompts now also
+  match a wireless pad that is switched on after the game starts.
+- In-game overlay menu (L3 + R3) in English or Chinese: graphics, frame rate, frame generation, performance HUD
+  (game → shown FPS), controller, mods.
 - Mod and DLC management with version checks, safe mode and rollback.
 - macOS app bundle and an iPadOS app (ahead-of-time compiled, no JIT needed on the device).
 
@@ -59,7 +70,7 @@ Issues or messages asking for them will be closed.
 - The iPadOS build embeds code translated from **your** copy of the game. It is for your own device only.
   Do not share the resulting `.ipa`, app or any file derived from the game.
 - This project is free and non-commercial. It takes no donations and sells nothing.
-- The NVIDIA DLSS SDK is downloaded at build time under NVIDIA's license and is not committed.
+- The NVIDIA DLSS SDK and the NVIDIA Streamline SDK are downloaded at build time under NVIDIA's licenses and are not committed.
 - This README is not legal advice. The laws on emulation and on making copies differ between countries.
   Check yours.
 
@@ -85,6 +96,7 @@ Built on (code used, under each project's license):
 | [FFmpeg](https://ffmpeg.org/), [libvpx](https://chromium.googlesource.com/webm/libvpx) | video decoding |
 | [shaderc](https://github.com/google/shaderc), [Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers) | shader compilation and headers |
 | [NVIDIA DLSS SDK](https://github.com/NVIDIA/DLSS) | DLSS (downloaded at build time, not committed) |
+| [NVIDIA Streamline](https://github.com/NVIDIA-RTX/Streamline) | DLSS Frame Generation and Reflex (downloaded at build time, not committed) |
 
 Studied as references (ideas and published findings only, no code copied):
 
