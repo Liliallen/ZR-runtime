@@ -7,6 +7,9 @@ namespace ARMeilleure.State
     {
         private const int MinCountForCheck = 4000;
 
+        /// <summary>Synchronization checks between two interrupt checks (tests lower it to exercise the cold path).</summary>
+        internal static int SyncCheckInterval = MinCountForCheck;
+
         private readonly NativeContext _nativeContext;
 
         internal nint NativeContextPtr => _nativeContext.BasePtr;
@@ -119,7 +122,7 @@ namespace ARMeilleure.State
 
             Running = true;
 
-            _nativeContext.SetCounter(MinCountForCheck);
+            _nativeContext.SetCounter(SyncCheckInterval);
         }
 
         public ulong GetX(int index) => _nativeContext.GetX(index);
@@ -143,7 +146,7 @@ namespace ARMeilleure.State
                 _interruptCallback?.Invoke(this);
             }
 
-            _nativeContext.SetCounter(MinCountForCheck);
+            _nativeContext.SetCounter(SyncCheckInterval);
         }
 
         public void RequestInterrupt()

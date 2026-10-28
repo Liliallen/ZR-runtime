@@ -23,6 +23,20 @@ namespace ARMeilleure.Translation
         private readonly Lazy<nint> _dispatchStub;
         private readonly Lazy<DispatcherFunction> _dispatchLoop;
         private readonly Lazy<WrapperFunction> _contextWrapper;
+        private readonly Lazy<nint> _syncCheckStub;
+
+        /// <summary>
+        /// Gets the register-preserving synchronization check stub (CPU V3, x86-64 only).
+        /// </summary>
+        public nint SyncCheckStub
+        {
+            get
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+
+                return _syncCheckStub.Value;
+            }
+        }
 
         /// <summary>
         /// Gets the dispatch stub.
@@ -95,6 +109,7 @@ namespace ARMeilleure.Translation
             _dispatchStub = new(GenerateDispatchStub, isThreadSafe: true);
             _dispatchLoop = new(GenerateDispatchLoop, isThreadSafe: true);
             _contextWrapper = new(GenerateContextWrapper, isThreadSafe: true);
+            _syncCheckStub = new(GenerateSyncCheckStub, isThreadSafe: true);
         }
 
         /// <summary>
@@ -117,6 +132,11 @@ namespace ARMeilleure.Translation
                 if (_dispatchStub.IsValueCreated)
                 {
                     JitCache.Unmap(_dispatchStub.Value);
+                }
+
+                if (_syncCheckStub.IsValueCreated)
+                {
+                    JitCache.Unmap(_syncCheckStub.Value);
                 }
 
                 if (_dispatchLoop.IsValueCreated)
@@ -194,6 +214,17 @@ namespace ARMeilleure.Translation
             Diagnostics.GuestPerfMap.Write(pointer, compiled.Code.Length, "stub_dispatch");
 
             return Marshal.GetFunctionPointerForDelegate(func);
+        }
+
+        private static nint GenerateSyncCheckStub()
+        {
+            nint target = Delegates.GetDelegateFuncPtrByIndex(
+                Delegates.GetDelegateIndex(typeof(NativeInterface).GetMethod(nameof(NativeInterface.CheckSynchronization))));
+            CompiledFunction compiled = Translation.SyncCheckStub.Generate(target);
+            nint pointer = JitCache.Map(compiled);
+            Diagnostics.GuestPerfMap.Write(pointer, compiled.Code.Length, "stub_sync_check");
+
+            return pointer;
         }
 
         /// <summary>

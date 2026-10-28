@@ -60,6 +60,20 @@ namespace Ryujinx.Ava
 
             PreviewerDetached = true;
 
+            // BOTW-PC: BOTWPC_PROCESS_PRIORITY=AboveNormal|High raises the process priority class, so background
+            // applications take the CPU from the emulator's threads less often.
+            if (Enum.TryParse(Environment.GetEnvironmentVariable("BOTWPC_PROCESS_PRIORITY"), ignoreCase: true, out System.Diagnostics.ProcessPriorityClass priority))
+            {
+                try
+                {
+                    System.Diagnostics.Process.GetCurrentProcess().PriorityClass = priority;
+                }
+                catch (Exception)
+                {
+                    // Not allowed (e.g. RealTime without the privilege): keep the default.
+                }
+            }
+
             if (Array.IndexOf(args, "--botw-mods") >= 0)
             {
                 return Ryujinx.HLE.BotwPc.Mods.ModCli.Run(args);

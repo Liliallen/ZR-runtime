@@ -5,6 +5,23 @@ statistics after a 90 s warm-up. Machine in `BASELINE.md`. Raw data in `botw/res
 Run-to-run spread is ±2–4 FPS median on this desktop (other applications were running during some runs); A/B
 comparisons therefore use the same binary with an environment switch, alternating order, two runs per side.
 
+## Round 2026-10-27 (ZR-runtime build-zr-v3c7): host import, process priority, GPU-thread profile
+
+Scene W2, `bench/zr/matrix.ps1` (DLSS off, immediate present, V3 runtime), League client and browsers running in the
+background (absolute FPS moved between ~80 and ~93 within the session with their load; paired rounds only).
+
+| Change | Result |
+|---|---|
+| Vulkan host import of texture flush buffers off (default now; KNOWN_ISSUES #44) | average FPS unchanged: off − exact import −2.0 (±3.0), chunked 16 MB import − exact −3.1 (±2.5, order effect in the first 3 rounds; reversed order: −2.0/−1.2/+0.2); world-load stall and TDR gone |
+| Process priority class (`BOTWPC_PROCESS_PRIORITY`, 4 rounds, both orders) | AboveNormal +0.72 FPS (3/4 rounds), High +0.71 (4/4), 1 % low and P95/P99 within noise; Play-BOTW.bat uses AboveNormal |
+
+GPU command thread with region timers (`BOTWPC_PROFILE=1`, per frame): 5 044 draws, buffer commit 2.9 ms, draw update
+1.7 ms, decode 1.6 ms, texture commit 1.1 ms, register callbacks 1.0 ms, macros 0.8 ms; buffer sync copies 1.36 MB in
+0.18 ms. A `dotnet-trace` thread-time profile attributed 26 % of the thread to `Buffer.Memmove` under
+`CircularSpanPool.Insert`: a sampling artefact (EventPipe samples at suspension points), contradicted by the region
+timer, so it is not a target. The distance to 120 FPS is unchanged: the per-draw work is spread over ~5 000 draws and
+needs the structural change in NEXT_STEPS.md (2).
+
 ## Runtime V2 (2026-10-15/16): CPU V2, GPU V2, HLE V2 — final matrix
 
 Scene W2, `BOTWPC_PRESENT_IMMEDIATE=1`, DLSS off, 120 FPS mode, branch `runtime-v2` (`6ad74a0fe`), one binary,

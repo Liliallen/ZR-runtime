@@ -46,6 +46,13 @@ namespace ARMeilleure.Instructions
             Statistics.ResumeTimer();
         }
 
+        /// <summary>BOTW-PC test aid: <see cref="Diagnostics.GuestProbe"/> hit (registered only when probes are set).</summary>
+        [UnmanagedCallersOnly]
+        public static void Probe(ulong address)
+        {
+            Diagnostics.GuestProbe.Hit(Context.Context, Context.Memory, address);
+        }
+
         [UnmanagedCallersOnly]
         public static void SupervisorCall(ulong address, int imm)
         {

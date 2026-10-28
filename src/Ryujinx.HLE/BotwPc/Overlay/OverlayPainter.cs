@@ -18,6 +18,9 @@ namespace Ryujinx.HLE.BotwPc.Overlay
     {
         public HudMode Mode { get; init; }
         public float Fps { get; init; }
+
+        /// <summary>Frames shown per second with DLSS Frame Generation (0 = not generating frames).</summary>
+        public float OutputFps { get; init; }
         public float FrameMs { get; init; }
         public float TargetFps { get; init; }
         public float[] FrameTimes { get; init; } = [];
@@ -304,7 +307,7 @@ namespace Ryujinx.HLE.BotwPc.Overlay
 
         private SKSize MeasureHud(float s, HudData hud)
         {
-            float w = hud.Mode == HudMode.Basic ? 230 * s : 360 * s;
+            float w = (hud.Mode == HudMode.Basic ? 230 * s : 360 * s) + (hud.OutputFps > 0 ? 70 * s : 0);
             float h = hud.Mode == HudMode.Basic ? 44 * s : 44 * s + 76 * s + hud.Lines.Count * 22 * s + 10 * s;
 
             return new SKSize(w, h);
@@ -317,8 +320,11 @@ namespace Ryujinx.HLE.BotwPc.Overlay
             _paint.Color = new SKColor(8, 10, 12, 190);
             canvas.DrawRoundRect(SKRect.Create(x, y, size.Width, size.Height), 8 * s, 8 * s, _paint);
 
-            bool low = hud.TargetFps > 0 && hud.Fps < hud.TargetFps * 0.9f;
-            DrawText(canvas, $"{hud.Fps:0.0} FPS", x + 12 * s, y + 30 * s, 22 * s, low && !hud.Paused ? Warn : Text);
+            // The frame-rate target does not apply while frames are generated (the shown-frame limit sets the game rate).
+            bool low = hud.OutputFps <= 0 && hud.TargetFps > 0 && hud.Fps < hud.TargetFps * 0.9f;
+            // With frame generation: game frames → shown frames (e.g. "80 → 160 FPS").
+            string fps = hud.OutputFps > 0 ? $"{hud.Fps:0} → {hud.OutputFps:0} FPS" : $"{hud.Fps:0.0} FPS";
+            DrawText(canvas, fps, x + 12 * s, y + 30 * s, 22 * s, low && !hud.Paused ? Warn : Text);
             DrawText(canvas, hud.Paused ? "paused" : $"{hud.FrameMs:0.0} ms", x + size.Width - 12 * s, y + 30 * s, 18 * s, hud.Paused ? Warn : Dim, SKTextAlign.Right);
 
             if (hud.Compiling)

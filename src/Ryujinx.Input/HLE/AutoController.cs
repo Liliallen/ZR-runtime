@@ -179,8 +179,40 @@ namespace Ryujinx.Input.HLE
         public static PromptMapping ResolvePrompts(List<InputConfig> saved, IGamepadDriver driver, ControllerSettings settings, out string reason)
         {
             List<InputConfig> effective = Apply(saved ?? [], driver, settings);
+            InputConfig player1 = effective.Find(c => c.PlayerIndex == PlayerIndex.Player1);
 
-            return ButtonPrompts.FromConfig(effective.Find(c => c.PlayerIndex == PlayerIndex.Player1), settings.Prompts, out reason);
+            // No pad yet: generate the prompts for the controller that was auto-assigned last time, which the automatic
+            // config will use once it connects (the overlay cannot change after the game has read it).
+            if (player1 is not StandardControllerInputConfig && settings.AutoAssign && settings.Prompts != PromptStyle.Original &&
+                !string.IsNullOrWhiteSpace(settings.LastController) && Environment.GetEnvironmentVariable("BOTWPC_AUTO_CONTROLLER") != "0")
+            {
+                PromptMapping predicted = ButtonPrompts.FromConfig(Build("", settings.LastController, settings, false), settings.Prompts, out reason);
+                reason += " (last controller, not connected yet)";
+
+                return predicted;
+            }
+
+            return ButtonPrompts.FromConfig(player1, settings.Prompts, out reason);
+        }
+
+        /// <summary>Remembers the auto-assigned controller for <see cref="ResolvePrompts"/> at the next game start.</summary>
+        public static void RememberController(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name) || name == BotwPcSettings.Instance.Controller.LastController)
+            {
+                return;
+            }
+
+            try
+            {
+                BotwPcSettings settings = BotwPcSettings.Instance.Clone();
+                settings.Controller.LastController = name;
+                settings.Save();
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning?.Print(LogClass.Hid, $"BOTW-PC: could not remember the controller: {ex.Message}");
+            }
         }
 
         /// <summary>

@@ -19,6 +19,32 @@ namespace ARMeilleure.Diagnostics
             return string.IsNullOrEmpty(path) ? null : new StreamWriter(path, append: true) { AutoFlush = true };
         }
 
+        // BOTWPC_TRANSLATE_LOG=<file>: "seconds guest-address guest-size high-cq" per translation. With PPTC off, a
+        // function's first (low-CQ) translation is its first execution, so code that runs only during an in-game action
+        // (a hit, a menu) shows up as translations at that moment. Used to locate game code without symbols.
+        private static readonly StreamWriter _translateLog = OpenTranslateLog();
+        private static readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+
+        private static StreamWriter OpenTranslateLog()
+        {
+            string path = Environment.GetEnvironmentVariable("BOTWPC_TRANSLATE_LOG");
+
+            return string.IsNullOrEmpty(path) ? null : new StreamWriter(path, append: false) { AutoFlush = true };
+        }
+
+        public static void WriteTranslation(ulong guest, ulong guestSize, bool highCq)
+        {
+            if (_translateLog == null)
+            {
+                return;
+            }
+
+            lock (_translateLog)
+            {
+                _translateLog.WriteLine($"{_clock.Elapsed.TotalSeconds:F3} {guest:x} {guestSize:x} {(highCq ? 1 : 0)}");
+            }
+        }
+
         public static void Write(nint host, int size, ulong guest, ulong guestSize)
         {
             if (_writer == null)

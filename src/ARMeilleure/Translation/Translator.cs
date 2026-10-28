@@ -259,6 +259,7 @@ namespace ARMeilleure.Translation
 
             GuestFunction func = compiledFunc.MapWithPointer<GuestFunction>(out nint funcPointer);
             Diagnostics.GuestPerfMap.Write(funcPointer, compiledFunc.Code.Length, address, funcSize);
+            Diagnostics.GuestPerfMap.WriteTranslation(address, funcSize, highCq);
 
             Allocators.ResetAll();
 
@@ -476,6 +477,13 @@ namespace ARMeilleure.Translation
                             InstEmitFlowHelper.EmitCondBranch(context, lblPredicateSkip, op.Cond.Invert());
                         }
 
+                        if (Diagnostics.GuestProbe.Enabled && Diagnostics.GuestProbe.IsProbed(opCode.Address))
+                        {
+                            context.StoreToContext();
+                            context.Call(typeof(NativeInterface).GetMethod(nameof(NativeInterface.Probe)), Const(opCode.Address));
+                            context.LoadFromContext();
+                        }
+
                         if (opCode.Instruction.Emitter != null)
                         {
                             opCode.Instruction.Emitter(context);
@@ -544,7 +552,19 @@ namespace ARMeilleure.Translation
             Operand count = context.Load(OperandType.I32, countAddr);
             context.BranchIfTrue(lblNonZero, count, BasicBlockFrequency.Cold);
 
-            Operand running = context.Call(typeof(NativeInterface).GetMethod(nameof(NativeInterface.CheckSynchronization)));
+            Operand running;
+
+            if (CpuV2.Has(CpuV2Features.PreservingSyncCall) && context is ArmEmitterContext armContext &&
+                RuntimeInformation.ProcessArchitecture == Architecture.X64)
+            {
+                armContext.SyncQcFlag();
+                running = context.Call(Const((long)armContext.Stubs.SyncCheckStub, Ptc.SyncCheckStubSymbol), OperandType.I32);
+            }
+            else
+            {
+                running = context.Call(typeof(NativeInterface).GetMethod(nameof(NativeInterface.CheckSynchronization)));
+            }
+
             context.BranchIfTrue(lblExit, running, BasicBlockFrequency.Cold);
 
             context.Return(Const(0L));

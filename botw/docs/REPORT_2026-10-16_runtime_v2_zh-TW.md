@@ -179,7 +179,7 @@ DLSS（完整 V2，3+3 交錯）：GPU thread −0.02 ms（CI −0.49 .. +0.46�
 
 | 項目 | 位置 |
 |---|---|
-| Runtime V2 執行檔（從 `6ad74a0fe` 乾淨建置） | `C:\Users\allen\Downloads\BOTW\botw-pc-runtime-v2\` |
+| Runtime V2 執行檔（從 `6ad74a0fe` 乾淨建置） | `C:\Users\<user>\Downloads\BOTW\botw-pc-runtime-v2\` |
 | 啟動器 | `botw-pc-runtime-v2\Play-BOTW-RuntimeV2.bat`：先問 Y/N → 把 `devdata` 存檔複製到 `save-backup\runtime-v2-<時間>` → 設定 V2 環境變數與 crash dump → 啟動 |
 | 正式版 | `botw-pc-win` + `Play-BOTW.bat` 沒動，仍是 legacy |
 | 第一次用 V2 啟動 | 多約 20 秒（建立 V2 自己的 PPTC 快取，不碰 legacy 快取） |

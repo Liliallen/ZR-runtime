@@ -48,7 +48,7 @@ namespace ARMeilleure.Instructions
 
             if (isSimd)
             {
-                EmitReadVector(context, address, context.VectorZero(), rt, 0, size);
+                EmitReadVector(context, address, context.VectorZero(), rt, 0, size, zeroed: true);
             }
             else
             {
@@ -235,7 +235,8 @@ namespace ARMeilleure.Instructions
             Operand vector,
             int rt,
             int elem,
-            int size)
+            int size,
+            bool zeroed = false)
         {
             Operand lblSlowPath = Label();
             Operand lblEnd = Label();
@@ -253,10 +254,14 @@ namespace ARMeilleure.Instructions
                     value = context.VectorInsert16(vector, context.Load16(physAddr), elem);
                     break;
                 case 2:
-                    value = context.VectorInsert(vector, context.Load(OperandType.I32, physAddr), elem);
+                    value = zeroed && elem == 0 && CpuV2.Has(CpuV2Features.ScalarVectorLoads)
+                        ? context.VectorCreateScalar(context.Load(OperandType.I32, physAddr))
+                        : context.VectorInsert(vector, context.Load(OperandType.I32, physAddr), elem);
                     break;
                 case 3:
-                    value = context.VectorInsert(vector, context.Load(OperandType.I64, physAddr), elem);
+                    value = zeroed && elem == 0 && CpuV2.Has(CpuV2Features.ScalarVectorLoads)
+                        ? context.VectorCreateScalar(context.Load(OperandType.I64, physAddr))
+                        : context.VectorInsert(vector, context.Load(OperandType.I64, physAddr), elem);
                     break;
                 case 4:
                     value = context.Load(OperandType.V128, physAddr);

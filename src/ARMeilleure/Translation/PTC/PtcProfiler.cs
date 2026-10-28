@@ -369,7 +369,23 @@ namespace ARMeilleure.Translation.PTC
                     return;
                 }
 
-                using FileStream compressedStream = new(fileName, FileMode.OpenOrCreate);
+                // BOTW-PC: another process (a second instance, a virus scanner or indexer) can hold the file for a moment;
+                // that used to end the emulator with an unhandled IOException (crash dump 2026-10-15 17:12). The profile
+                // is saved again at the next periodic save.
+                FileStream openedStream;
+
+                try
+                {
+                    openedStream = new(fileName, FileMode.OpenOrCreate);
+                }
+                catch (IOException exception)
+                {
+                    Logger.Warning?.Print(LogClass.Ptc, $"Profiling Info not saved this time: {exception.Message}");
+
+                    return;
+                }
+
+                using FileStream compressedStream = openedStream;
                 using DeflateStream deflateStream = new(compressedStream, SaveCompressionLevel, true);
                 try
                 {

@@ -177,5 +177,20 @@ namespace Ryujinx.Common.BotwPc.Overlay
         public static volatile string Sizes = "";
 
         public static bool RanRecently => System.Diagnostics.Stopwatch.GetTimestamp() - System.Threading.Interlocked.Read(ref LastEvaluation) < System.Diagnostics.Stopwatch.Frequency;
+
+        /// <summary>DLSS Frame Generation state, e.g. "Streamline not installed", "ready", "on (2x)".</summary>
+        public static volatile string FrameGenStatus = "off";
+
+        /// <summary>Streamline and DLSS-G loaded at start: frame generation can be changed live.</summary>
+        public static volatile bool FrameGenAvailable;
+
+        /// <summary>Generated frames per game frame wanted now (0 = off, 1..3 = 2x..4x); the overlay changes it live.</summary>
+        public static volatile int FrameGenFrames;
+
+        /// <summary>Shown-frame limit while frame generation runs (0 = none); the overlay changes it live.</summary>
+        public static volatile int FrameGenFpsLimit;
+
+        /// <summary>Frames shown per game frame, recent average (1 when not interpolating, 0 when frame generation is off).</summary>
+        public static volatile float FrameGenShownPerFrame;
     }
 }

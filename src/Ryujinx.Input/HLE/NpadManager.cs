@@ -155,6 +155,11 @@ namespace Ryujinx.Input.HLE
                     Logger.Info?.Print(LogClass.Hid, autoId == null
                         ? "BOTW-PC: Player 1 uses the saved input configuration."
                         : $"BOTW-PC: Player 1 auto-assigned to \"{inputConfig[0].Name}\" ({autoId}).");
+
+                    if (autoId != null)
+                    {
+                        AutoController.RememberController(inputConfig[0].Name);
+                    }
                 }
 
                 NpadController[] oldControllers = _controllers.ToArray();

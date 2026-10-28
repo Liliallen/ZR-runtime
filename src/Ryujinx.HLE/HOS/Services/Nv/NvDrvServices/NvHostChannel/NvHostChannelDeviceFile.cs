@@ -154,6 +154,9 @@ namespace Ryujinx.HLE.HOS.Services.Nv.NvDrvServices.NvHostChannel
             Span<SyncptIncr> syncptIncrs = GetSpanAndSkip<SyncptIncr>(ref arguments, submitHeader.SyncptIncrsCount);
             Span<uint> fenceThresholds = GetSpanAndSkip<uint>(ref arguments, submitHeader.FencesCount);
 
+            // BOTW-PC: NVDEC/VIC work means a video is playing.
+            _device.BotwVideo?.OnDecoderSubmit();
+
             lock (_device)
             {
                 for (int i = 0; i < syncptIncrs.Length; i++)

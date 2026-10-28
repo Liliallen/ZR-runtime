@@ -32,6 +32,7 @@ namespace Ryujinx.Graphics.Vulkan
             public int SubmissionCount;
             public CommandBuffer CommandBuffer;
             public FenceHolder Fence;
+            public long SubmitTicks;
 
             public List<IAuto> Dependants;
             public List<MultiFenceHolder> Waitables;
@@ -64,6 +65,13 @@ namespace Ryujinx.Graphics.Vulkan
         private QueryPool _timestampPool;
         private double _timestampTicksPerUnit;
         private ulong _lastTimestampEnd;
+        // Timeline only: GPU ticks -> Stopwatch ticks offset, estimated as the smallest (GPU start - CPU submit) seen
+        // (a command buffer cannot start before it was submitted; the error is the shortest queue latency).
+        // The two clocks drift (tens of ppm), so the minimum is taken per 1 s window (the previous window's value is
+        // used until the current one has samples).
+        private double _gpuToCpuOffset = double.MaxValue;
+        private double _gpuToCpuOffsetNext = double.MaxValue;
+        private long _gpuToCpuWindowEnd;
 
         public unsafe CommandBufferPool(
             Vk api,
@@ -140,6 +148,25 @@ namespace Ryujinx.Graphics.Vulkan
             }
 
             _lastTimestampEnd = Math.Max(_lastTimestampEnd, times[1]);
+
+            if (Ryujinx.Common.BotwPc.TimelineTrace.Configured && times[1] >= times[0] && _commandBuffers[cbIndex].SubmitTicks != 0)
+            {
+                double gpuStart = times[0] * _timestampTicksPerUnit;
+                long submit = _commandBuffers[cbIndex].SubmitTicks;
+                _gpuToCpuOffsetNext = Math.Min(_gpuToCpuOffsetNext, gpuStart - submit);
+
+                if (submit >= _gpuToCpuWindowEnd)
+                {
+                    _gpuToCpuOffset = _gpuToCpuOffsetNext;
+                    _gpuToCpuOffsetNext = double.MaxValue;
+                    _gpuToCpuWindowEnd = submit + Stopwatch.Frequency;
+                }
+
+                _gpuToCpuOffset = Math.Min(_gpuToCpuOffset, gpuStart - submit);
+                long cpuStart = (long)(gpuStart - _gpuToCpuOffset);
+                long cpuEnd = (long)(times[1] * _timestampTicksPerUnit - _gpuToCpuOffset);
+                Ryujinx.Common.BotwPc.TimelineTrace.Span("GpuExec", cpuStart, cpuEnd, (cpuStart - _commandBuffers[cbIndex].SubmitTicks).ToString());
+            }
         }
 
         public void AddDependant(int cbIndex, IAuto dependant)
@@ -364,6 +391,7 @@ namespace Ryujinx.Graphics.Vulkan
                         {
                             long submitStart = System.Diagnostics.Stopwatch.GetTimestamp();
                             _api.QueueSubmit(_queue, 1, in sInfo, entry.Fence.GetUnsafe()).ThrowOnError();
+                            entry.SubmitTicks = System.Diagnostics.Stopwatch.GetTimestamp();
                             Ryujinx.Common.BotwPc.GpuCounters.AddElapsed(Ryujinx.Common.BotwPc.GpuCounters.Id.QueueSubmits, Ryujinx.Common.BotwPc.GpuCounters.Id.QueueSubmitTicks, submitStart);
                         }
                     }

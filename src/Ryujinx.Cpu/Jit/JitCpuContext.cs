@@ -30,12 +30,19 @@ namespace Ryujinx.Cpu.Jit
                 return ARMeilleure.CpuV2Features.None;
             }
 
-            return ARMeilleure.CpuV2Features.Exact | Ryujinx.Common.BotwPc.RuntimeV2.CpuV2Abi switch
+            ARMeilleure.CpuV2Features features = ARMeilleure.CpuV2Features.Exact | Ryujinx.Common.BotwPc.RuntimeV2.CpuV2Abi switch
             {
                 Ryujinx.Common.BotwPc.CpuV2AbiMode.Flags => ARMeilleure.CpuV2Features.AbiFlagLiveness,
                 Ryujinx.Common.BotwPc.CpuV2AbiMode.Temporaries => ARMeilleure.CpuV2Features.AbiCallLiveness,
                 _ => ARMeilleure.CpuV2Features.None,
             };
+
+            if (Ryujinx.Common.BotwPc.RuntimeV2.CpuV3)
+            {
+                features |= ARMeilleure.CpuV2Features.V3;
+            }
+
+            return features;
         }
 
         public JitCpuContext(ITickSource tickSource, IMemoryManager memory, bool for64Bit)

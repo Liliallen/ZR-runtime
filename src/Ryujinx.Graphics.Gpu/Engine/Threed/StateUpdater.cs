@@ -374,7 +374,10 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
         // 3x4), 3..6 world → clip, 7..10 projection, 11..13 inverse view, 14 (near, far, ...) — read at runtime (DLSS.md).
         // The world → clip rows (bytes 0x30..0x6F) are sent. The first draw into a 16:9 scene target with depth after
         // the output-size pass of the previous frame sends it to the backend, in command order.
-        private static bool BotwCameraEnabled => _botwCameraLog != null || Common.BotwPc.GraphicsSettings.EffectiveDlss is not ("off" or "");
+        private static bool BotwCameraEnabled => _botwCameraLog != null || _botwFrameGeneration || Common.BotwPc.GraphicsSettings.EffectiveDlss is not ("off" or "");
+
+        // DLSS-G (frame generation) also needs the camera; it is chosen at start, so read once.
+        private static readonly bool _botwFrameGeneration = Common.BotwPc.GraphicsSettings.EffectiveFrameGeneration != 0;
 
         // BOTW-PC diagnostics (BOTWPC_CAMERA_LOG=<file>): the scene camera's world -> clip matrix of every frame, one line
         // "time_s m00 .. m33" on the framelog clock, for frame-rate regression tests (botw/scripts/camera_track.py solves
@@ -426,10 +429,18 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
                     string.Join(" | ", System.Linq.Enumerable.Range(0, 16).Select(r => $"{r}: " + string.Join(" ", System.Linq.Enumerable.Range(0, 4).Select(c => all[r * 4 + c].ToString("0.###"))))));
             }
 
-            Span<float> data = stackalloc float[18];
+            // 18 floats (world -> clip, size), or 50 with the projection, inverse view and near/far rows (0x70..0xEF) that
+            // DLSS-G's camera constants need.
+            bool extended = range.GetSubRange(0).Size >= 0xF0;
+            Span<float> data = stackalloc float[extended ? 50 : 18];
             System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(_channel.MemoryManager.Physical.GetSpan(range.GetSubRange(0).Address + 0x30, 64)).CopyTo(data);
             data[16] = width;
             data[17] = height;
+
+            if (extended)
+            {
+                System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(_channel.MemoryManager.Physical.GetSpan(range.GetSubRange(0).Address + 0x70, 128)).CopyTo(data[18..]);
+            }
 
             if (_botwCameraLog != null)
             {
@@ -444,7 +455,7 @@ namespace Ryujinx.Graphics.Gpu.Engine.Threed
                 _botwCameraLog.WriteLine(line.ToString());
             }
 
-            if (Common.BotwPc.GraphicsSettings.EffectiveDlss is not ("off" or ""))
+            if (_botwFrameGeneration || Common.BotwPc.GraphicsSettings.EffectiveDlss is not ("off" or ""))
             {
                 _context.Renderer.Pipeline.SetBotwCamera(data);
             }

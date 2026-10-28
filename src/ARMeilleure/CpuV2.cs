@@ -40,7 +40,19 @@ namespace ARMeilleure
         /// through empty blocks.</summary>
         CodeCleanup = 1 << 7,
 
+        /// <summary>CPU V3 (x86-64 hosts): the cold path of the synchronization check at function entries and loop back
+        /// edges calls a stub that preserves all caller-saved registers (<see cref="Translation.SyncCheckStub"/>), so
+        /// the allocator only reserves the return register there instead of treating the check as a full call.</summary>
+        PreservingSyncCall = 1 << 8,
+
+        /// <summary>CPU V3: a 32/64-bit SIMD&amp;FP register load (LDR St/Dt) builds the zero-extended vector with one
+        /// MOVD/MOVQ instead of zeroing a vector and inserting the element (same result).</summary>
+        ScalarVectorLoads = 1 << 9,
+
         Exact = ValueNumbering | SpillAtDefinition | DuplicateEdgeFix | PhiCopyOnEdge | ReverseCopyHints | CodeCleanup,
+
+        /// <summary>CPU V3 additions (architecturally exact, combined with <see cref="Exact"/> and the ABI level).</summary>
+        V3 = PreservingSyncCall | ScalarVectorLoads,
 
         /// <summary>
         /// Treats the condition flags (NZCV) as dead at BL/BLR call sites and at RET: they are neither kept alive nor

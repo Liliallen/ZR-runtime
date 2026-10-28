@@ -27,7 +27,9 @@ namespace Ryujinx.Graphics.Shader.Translation
         private readonly Dictionary<int, int> _sbSlots;
         private readonly Dictionary<int, int> _sbSlotsReverse;
 
-        private readonly HashSet<int> _usedConstantBufferBindings;
+        // Constant buffer bindings the shader reads, with the end (in bytes) of the highest vec4 it reads at a constant
+        // offset; int.MaxValue when any read has a dynamic offset.
+        private readonly Dictionary<int, int> _usedConstantBufferBindings;
 
         private readonly record struct TextureInfo(int CbufSlot, int Handle, int ArrayLength, bool Separate, SamplerType Type, TextureFormat Format);
 
@@ -447,9 +449,11 @@ namespace Ryujinx.Graphics.Shader.Translation
             }
         }
 
-        public void SetUsedConstantBufferBinding(int binding)
+        public void SetUsedConstantBufferBinding(int binding, int endByte = int.MaxValue)
         {
-            _usedConstantBufferBindings.Add(binding);
+            _usedConstantBufferBindings[binding] = _usedConstantBufferBindings.TryGetValue(binding, out int current)
+                ? Math.Max(current, endByte)
+                : endByte;
         }
 
         public BufferDescriptor[] GetConstantBufferDescriptors()
@@ -462,9 +466,11 @@ namespace Ryujinx.Graphics.Shader.Translation
             {
                 SetBindingPair setAndBinding = _cbSlotToBindingMap[slot];
 
-                if (setAndBinding.Binding >= 0 && _usedConstantBufferBindings.Contains(setAndBinding.Binding))
+                if (setAndBinding.Binding >= 0 && _usedConstantBufferBindings.TryGetValue(setAndBinding.Binding, out int endByte))
                 {
-                    descriptors[descriptorIndex++] = new BufferDescriptor(setAndBinding.SetIndex, setAndBinding.Binding, slot);
+                    int usedSize = endByte <= Constants.ConstantBufferSize ? endByte : 0;
+
+                    descriptors[descriptorIndex++] = new BufferDescriptor(setAndBinding.SetIndex, setAndBinding.Binding, slot, usedSize);
                 }
             }
 

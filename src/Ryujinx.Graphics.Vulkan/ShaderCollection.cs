@@ -82,7 +82,7 @@ namespace Ryujinx.Graphics.Vulkan
                 RenderTargetCensus.RegisterProgram(this, shaders);
             }
 
-            if (Dlss.Available)
+            if (Dlss.Available || DlssG.Available)
             {
                 BotwId = RenderTargetCensus.ProgramId(shaders);
             }

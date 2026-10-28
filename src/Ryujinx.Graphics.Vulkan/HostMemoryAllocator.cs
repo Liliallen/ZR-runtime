@@ -85,57 +85,98 @@ namespace Ryujinx.Graphics.Vulkan
                     }
                 }
 
-                nint pageAlignedPointer = BitUtils.AlignDown(pointer, Environment.SystemPageSize);
-                nint pageAlignedEnd = BitUtils.AlignUp((nint)((ulong)pointer + size), Environment.SystemPageSize);
-                ulong pageAlignedSize = (ulong)(pageAlignedEnd - pageAlignedPointer);
-
-                Result getResult = _hostMemoryApi.GetMemoryHostPointerProperties(_device, ExternalMemoryHandleTypeFlags.HostAllocationBitExt, (void*)pageAlignedPointer, out MemoryHostPointerPropertiesEXT properties);
-                if (getResult < Result.Success)
+                // BOTW-PC: an import costs ~10–70 ms in the NVIDIA driver whatever its size, and BotW's world load asks for
+                // ~30 small ones in a row (a ~2 s GPU-thread stall). Import a whole aligned chunk instead, keep it for the
+                // process lifetime (one extra reference) and let later flush buffers in it reuse it. Falls back to the exact
+                // range when the chunk import fails. BOTWPC_HOST_IMPORT_CHUNK_MB=0 imports exact ranges only.
+                if (_chunkSize != 0)
                 {
-                    return false;
+                    nint chunkStart = BitUtils.AlignDown(pointer, (nint)_chunkSize);
+                    nint chunkEnd = BitUtils.AlignUp((nint)((ulong)pointer + size), (nint)_chunkSize);
+
+                    if (TryImportRange(requirements, flags, chunkStart, (ulong)(chunkEnd - chunkStart), out Auto<MemoryAllocation> chunk))
+                    {
+                        chunk.IncrementReferenceCount(); // the permanent reference
+
+                        return true;
+                    }
                 }
 
-                int memoryTypeIndex = _allocator.FindSuitableMemoryTypeIndex(properties.MemoryTypeBits & requirements.MemoryTypeBits, flags);
-                if (memoryTypeIndex < 0)
-                {
-                    return false;
-                }
-
-                ImportMemoryHostPointerInfoEXT importInfo = new()
-                {
-                    SType = StructureType.ImportMemoryHostPointerInfoExt,
-                    HandleType = ExternalMemoryHandleTypeFlags.HostAllocationBitExt,
-                    PHostPointer = (void*)pageAlignedPointer,
-                };
-
-                MemoryAllocateInfo memoryAllocateInfo = new()
-                {
-                    SType = StructureType.MemoryAllocateInfo,
-                    AllocationSize = pageAlignedSize,
-                    MemoryTypeIndex = (uint)memoryTypeIndex,
-                    PNext = &importInfo,
-                };
-
-                Result result = _api.AllocateMemory(_device, in memoryAllocateInfo, null, out DeviceMemory deviceMemory);
-
-                if (result < Result.Success)
-                {
-                    Logger.Debug?.PrintMsg(LogClass.Gpu, $"Host mapping import 0x{pageAlignedPointer:x16} 0x{pageAlignedSize:x8} failed.");
-                    return false;
-                }
-
-                MemoryAllocation allocation = new(this, deviceMemory, pageAlignedPointer, 0, pageAlignedSize);
-                Auto<MemoryAllocation> allocAuto = new(allocation);
-                HostMemoryAllocation hostAlloc = new(allocAuto, pageAlignedPointer, pageAlignedSize);
-
-                allocAuto.IncrementReferenceCount();
-                allocAuto.Dispose(); // Kept alive by ref count only.
-
-                // Register this mapping for future use.
-
-                _allocationTree.Add(hostAlloc.Start, hostAlloc.End, hostAlloc);
-                _allocations.Add(hostAlloc);
+                return TryImportRange(requirements, flags, BitUtils.AlignDown(pointer, Environment.SystemPageSize),
+                    (ulong)(BitUtils.AlignUp((nint)((ulong)pointer + size), Environment.SystemPageSize) - BitUtils.AlignDown(pointer, Environment.SystemPageSize)), out _);
             }
+        }
+
+        private static readonly ulong _chunkSize = ReadChunkSize();
+
+        private static ulong ReadChunkSize()
+        {
+            string value = Environment.GetEnvironmentVariable("BOTWPC_HOST_IMPORT_CHUNK_MB");
+
+            return (ulong)(int.TryParse(value, out int mb) && mb >= 0 ? mb : 16) << 20;
+        }
+
+        // Imports [pageAlignedPointer, +pageAlignedSize) and registers it with one reference (the caller's). Holds _lock.
+        private unsafe bool TryImportRange(MemoryRequirements requirements, MemoryPropertyFlags flags, nint pageAlignedPointer, ulong pageAlignedSize, out Auto<MemoryAllocation> imported)
+        {
+            imported = null;
+
+            long importStart = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            Result getResult = _hostMemoryApi.GetMemoryHostPointerProperties(_device, ExternalMemoryHandleTypeFlags.HostAllocationBitExt, (void*)pageAlignedPointer, out MemoryHostPointerPropertiesEXT properties);
+            if (getResult < Result.Success)
+            {
+                return false;
+            }
+
+            int memoryTypeIndex = _allocator.FindSuitableMemoryTypeIndex(properties.MemoryTypeBits & requirements.MemoryTypeBits, flags);
+            if (memoryTypeIndex < 0)
+            {
+                return false;
+            }
+
+            ImportMemoryHostPointerInfoEXT importInfo = new()
+            {
+                SType = StructureType.ImportMemoryHostPointerInfoExt,
+                HandleType = ExternalMemoryHandleTypeFlags.HostAllocationBitExt,
+                PHostPointer = (void*)pageAlignedPointer,
+            };
+
+            MemoryAllocateInfo memoryAllocateInfo = new()
+            {
+                SType = StructureType.MemoryAllocateInfo,
+                AllocationSize = pageAlignedSize,
+                MemoryTypeIndex = (uint)memoryTypeIndex,
+                PNext = &importInfo,
+            };
+
+            Result result = _api.AllocateMemory(_device, in memoryAllocateInfo, null, out DeviceMemory deviceMemory);
+
+            if (result < Result.Success)
+            {
+                Logger.Debug?.PrintMsg(LogClass.Gpu, $"Host mapping import 0x{pageAlignedPointer:x16} 0x{pageAlignedSize:x8} failed.");
+                return false;
+            }
+
+            MemoryAllocation allocation = new(this, deviceMemory, pageAlignedPointer, 0, pageAlignedSize);
+            Auto<MemoryAllocation> allocAuto = new(allocation);
+            HostMemoryAllocation hostAlloc = new(allocAuto, pageAlignedPointer, pageAlignedSize);
+
+            allocAuto.IncrementReferenceCount();
+            allocAuto.Dispose(); // Kept alive by ref count only.
+            imported = allocAuto;
+
+            // BOTW-PC: a slow driver import stalls the GPU thread (seen: 1.5 s at world load, near the 2 s TDR limit).
+            double importMs = System.Diagnostics.Stopwatch.GetElapsedTime(importStart).TotalMilliseconds;
+            if (importMs > 50 || Environment.GetEnvironmentVariable("BOTWPC_LOG_HOST_IMPORT") == "1")
+            {
+                Logger.Info?.Print(LogClass.Gpu, $"BOTW-PC host import 0x{pageAlignedPointer:x} size 0x{pageAlignedSize:x} took {importMs:F1} ms ({_allocations.Count + 1} imports).");
+            }
+
+            // Register this mapping for future use.
+
+            _allocationTree.Add(hostAlloc.Start, hostAlloc.End, hostAlloc);
+            _allocations.Add(hostAlloc);
 
             return true;
         }

@@ -682,9 +682,83 @@ namespace Ryujinx.Graphics.Gpu.Shader
                 return true;
             }
 
+            if (Engine.GpuFrontend.ShaderCodeWatch)
+            {
+                return IsShaderEqualWatched(memoryManager, shader, gpuVa);
+            }
+
             ReadOnlySpan<byte> memoryCode = memoryManager.GetSpanMapped(gpuVa, shader.Code.Length);
 
             return memoryCode.SequenceEqual(shader.Code);
+        }
+
+        /// <summary>
+        /// GPU V3: the byte comparison of <see cref="IsShaderEqual(MemoryManager, CachedShaderStage, ulong)"/>, skipped
+        /// when nothing can have changed since the last comparison that found the code equal: same memory manager and
+        /// address, same GPU mapping sequence, and the CPU memory tracking handle over the code still clean (it is
+        /// dirtied by guest CPU writes, through the write protection, and by tracked GPU writes). The handle is rearmed
+        /// before the comparison, so a write that lands during or after it is seen at the next check.
+        /// </summary>
+        private static bool IsShaderEqualWatched(MemoryManager memoryManager, CachedShaderStage shader, ulong gpuVa)
+        {
+            ShaderCodeWatch watch = shader.Watch;
+            int sequence = memoryManager.MappingSequence;
+
+            if (watch != null && watch.MemoryManager == memoryManager && watch.GpuVa == gpuVa && watch.Sequence == sequence && !watch.Handle.Dirty)
+            {
+                if (Engine.FrontendVerify.Enabled)
+                {
+                    bool equal = memoryManager.GetSpanMapped(gpuVa, shader.Code.Length).SequenceEqual(shader.Code);
+                    Engine.FrontendVerify.Compare(Engine.FrontendVerify.Check.ShaderCodeWatch, equal, () => $"shader code at 0x{gpuVa:x} changed under a clean tracking handle");
+                }
+
+                if (Ryujinx.Common.BotwPc.GpuCounters.Detailed)
+                {
+                    Ryujinx.Common.BotwPc.GpuCounters.Add(Ryujinx.Common.BotwPc.GpuCounters.Id.ShaderWatchHits);
+                }
+
+                return true;
+            }
+
+            if (watch != null && (watch.MemoryManager != memoryManager || watch.GpuVa != gpuVa || watch.Sequence != sequence))
+            {
+                watch.Handle.Dispose();
+                watch = null;
+            }
+
+            if (watch == null)
+            {
+                Ryujinx.Memory.Range.MultiRange range = memoryManager.GetPhysicalRegions(gpuVa, (ulong)shader.Code.Length);
+
+                for (int i = 0; i < range.Count; i++)
+                {
+                    if (range.GetSubRange(i).Address == MemoryManager.PteUnmapped)
+                    {
+                        shader.Watch = null;
+
+                        return memoryManager.GetSpanMapped(gpuVa, shader.Code.Length).SequenceEqual(shader.Code);
+                    }
+                }
+
+                watch = new ShaderCodeWatch(memoryManager.Physical.BeginTracking(range, ResourceKind.None), memoryManager, gpuVa, sequence);
+            }
+
+            // Rearm first, compare second: a write after this point marks the handle dirty again.
+            watch.Handle.Reprotect();
+            if (Ryujinx.Common.BotwPc.GpuCounters.Detailed)
+            {
+                Ryujinx.Common.BotwPc.GpuCounters.Add(Ryujinx.Common.BotwPc.GpuCounters.Id.ShaderWatchCompares);
+            }
+
+            bool same = memoryManager.GetSpanMapped(gpuVa, shader.Code.Length).SequenceEqual(shader.Code);
+            shader.Watch = same ? watch : null;
+
+            if (!same)
+            {
+                watch.Handle.Dispose();
+            }
+
+            return same;
         }
 
         /// <summary>

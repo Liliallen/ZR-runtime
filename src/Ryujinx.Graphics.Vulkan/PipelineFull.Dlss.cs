@@ -134,9 +134,15 @@ namespace Ryujinx.Graphics.Vulkan
             _dumpStage++;
         }
 
+        // DLSS-G camera constants (SetBotwCamera extended data): projection (cb3 rows 7..10), inverse view (rows 11..13),
+        // near/far (row 14).
+        private readonly float[] _camProjection = new float[16], _camInverseView = new float[12];
+        private float _camNear, _camFar;
+        private bool _camExtended;
+
         public void SetBotwCamera(ReadOnlySpan<float> data)
         {
-            if (!Dlss.Available || data.Length < 18)
+            if (!BotwTracking || data.Length < 18)
             {
                 return;
             }
@@ -145,6 +151,14 @@ namespace Ryujinx.Graphics.Vulkan
             data[..16].CopyTo(_camCur);
             (_camWidth, _camHeight) = ((uint)data[16], (uint)data[17]);
             _camFrames++;
+            _camExtended = data.Length >= 50;
+
+            if (_camExtended)
+            {
+                data.Slice(18, 16).CopyTo(_camProjection);
+                data.Slice(34, 12).CopyTo(_camInverseView);
+                (_camNear, _camFar) = (data[46], data[47]);
+            }
 
             if (CamLog)
             {
@@ -242,10 +256,11 @@ namespace Ryujinx.Graphics.Vulkan
         /// Writes camera motion vectors (or zeros when no camera history) into <see cref="_dlssMotion"/>, and the DLSS
         /// depth (reversed) into <see cref="_dlssDepth"/>.
         /// </summary>
-        private unsafe void UpdateMotionVectors(TextureView depth, uint width, uint height)
+        private unsafe double[] UpdateMotionVectors(TextureView depth, uint width, uint height, bool offscreenDisocclusion = true)
         {
             bool valid = MotionEnabled && _camFrames >= 2 && _camWidth == width && _camHeight == height;
             double[] reproject = valid ? Reprojection(_camPrev, _camCur) : null;
+            double[] cameraReprojection = reproject;
 
             // Camera cut / teleport: the screen centre at mid depth jumps by more than a quarter of the screen.
             if (reproject != null)
@@ -255,6 +270,7 @@ namespace Ryujinx.Graphics.Vulkan
                 if (w <= 0 || Math.Abs(x / w) > 0.5 || Math.Abs(y / w) > 0.5)
                 {
                     _dlssReset = true;
+                    _fgReset = true;
 
                     if (++_dlssCuts <= 20)
                     {
@@ -294,7 +310,7 @@ namespace Ryujinx.Graphics.Vulkan
 
             p[16] = width;
             p[17] = height;
-            p[18] = MotionFlags | (_dlssDepthValid && DisocclusionMask ? 8 : 0) | (DisocclusionOffscreen ? 16 : 0);
+            p[18] = MotionFlags | (_dlssDepthValid && DisocclusionMask ? 8 : 0) | (DisocclusionOffscreen && offscreenDisocclusion ? 16 : 0);
             p[19] = DisocclusionThreshold;
 
             using ScopedTemporaryBuffer buffer = Gd.BufferManager.ReserveOrCreate(Gd, Cbs, 20 * sizeof(float));
@@ -312,6 +328,13 @@ namespace Ryujinx.Graphics.Vulkan
             _motionPipeline.DispatchCompute((int)(width + 15) / 16, (int)(height + 15) / 16, 1);
             _motionPipeline.Finish(Gd, Cbs);
             _dlssDepthValid = true;
+
+            if (cameraReprojection == null)
+            {
+                _fgReset = true;
+            }
+
+            return cameraReprojection;
         }
 
         private uint _dlssRenderWidth, _dlssRenderHeight, _dlssOutWidth, _dlssOutHeight;
@@ -334,7 +357,7 @@ namespace Ryujinx.Graphics.Vulkan
                 Logger.Info?.Print(LogClass.Gpu, $"BOTW-PC DLSS debug: 3-vertex draw program {BotwProgram?.BotwId} into {dbgOut.Width}x{dbgOut.Height} {dbgOut.Info.Format}");
             }
 
-            int quality = Dlss.Quality;
+            int quality = Dlss.Available ? Dlss.Quality : -1;
 
             // Off (live): the game's own upscale. A failed mode stays off until another mode is selected.
             if (quality < 0 || (_dlssFailed && quality == _dlssFailedQuality))
@@ -344,6 +367,11 @@ namespace Ryujinx.Graphics.Vulkan
                     _dlssCreated = false; // recreated (with reset history) if it is switched on again
                     Common.BotwPc.Overlay.DlssRuntime.Status = "off";
                     Logger.Info?.Print(LogClass.Gpu, "BOTW-PC DLSS: switched off; the game's own upscale is used.");
+                }
+
+                if (DlssG.Available && vertexCount == 3 && UpscaleProgramIds.Contains(BotwProgram?.BotwId))
+                {
+                    BotwFrameGenBeforeUpscale();
                 }
 
                 return false;
@@ -397,7 +425,7 @@ namespace Ryujinx.Graphics.Vulkan
             float frameMs = _dlssLastTimestamp == 0 ? 16.7f : (float)((now - _dlssLastTimestamp) * 1000.0 / Stopwatch.Frequency);
             _dlssLastTimestamp = now;
 
-            UpdateMotionVectors(depth, rw, rh);
+            double[] reproject = UpdateMotionVectors(depth, rw, rh);
             Barrier();
             DumpFrame(color, depth);
 
@@ -423,6 +451,13 @@ namespace Ryujinx.Graphics.Vulkan
 
             _dlssReset = false;
             Barrier();
+
+            // The HUD is drawn after this into the same target: what DLSS wrote is DLSS-G's hud-less colour.
+            if (DlssG.Available)
+            {
+                BotwFrameGenCapture(output, rw, rh, reproject, BotwJitter * JitterSign);
+            }
+
             BotwSignalCommandBufferChange();
             NextJitter(rw, rh);
 
@@ -463,8 +498,14 @@ namespace Ryujinx.Graphics.Vulkan
             Gd.Api.CmdPipelineBarrier(CommandBuffer, PipelineStageFlags.AllCommandsBit, PipelineStageFlags.AllCommandsBit, 0, 1, in barrier, 0, null, 0, null);
         }
 
-        private unsafe void CreateDlss(uint rw, uint rh, uint ow, uint oh)
+        /// <summary>Motion vector, reversed depth (current/previous) and mask targets at render size; no render pass active.</summary>
+        private unsafe void EnsureMotionTargets(uint rw, uint rh)
         {
+            if (_dlssMotion != null && _dlssMotion.Width == rw && _dlssMotion.Height == rh)
+            {
+                return;
+            }
+
             _dlssMotion?.Release();
             _dlssMotion = Gd.CreateTextureView(new TextureCreateInfo((int)rw, (int)rh, 1, 1, 1, 1, 1, 4, Format.R16G16Float,
                 DepthStencilMode.Depth, Target.Texture2D, SwizzleComponent.Red, SwizzleComponent.Green, SwizzleComponent.Blue, SwizzleComponent.Alpha));
@@ -484,6 +525,12 @@ namespace Ryujinx.Graphics.Vulkan
             ClearColorValue zero = default;
             ImageSubresourceRange range = new(ImageAspectFlags.ColorBit, 0, 1, 0, 1);
             Gd.Api.CmdClearColorImage(CommandBuffer, _dlssMotion.GetImage().Get(Cbs).Value, ImageLayout.General, &zero, 1, &range);
+        }
+
+        private unsafe void CreateDlss(uint rw, uint rh, uint ow, uint oh)
+        {
+            EnsureMotionTargets(rw, rh);
+            _dlssDepthValid = false;
 
             int flags = 1 << 1 /* MV low res */ | (DepthInverted || ReversedDepth ? 1 << 3 : 0);
             int quality = Dlss.Quality;
@@ -514,6 +561,106 @@ namespace Ryujinx.Graphics.Vulkan
             Common.BotwPc.Overlay.DlssRuntime.Sizes = $"{rw}×{rh} → {ow}×{oh}";
             NextJitter(rw, rh);
             Logger.Info?.Print(LogClass.Gpu, $"BOTW-PC DLSS: feature created {rw}x{rh} → {ow}x{oh}, quality {quality}, flags 0x{flags:x}");
+        }
+
+        // DLSS-G (DlssG.cs): with the game's own upscale, motion vectors and depth are computed before the upscale draw and
+        // the hud-less colour is copied right after it (the HUD is drawn next into the same target).
+        private TextureView _fgHudless, _fgHudlessSrgb, _fgPendingOutput;
+
+        private static TextureCreateInfo HudlessInfo(TextureView output, Format format) => new(output.Width, output.Height, 1, 1, 1, 1, 1, 4, format,
+            DepthStencilMode.Depth, Target.Texture2D, SwizzleComponent.Red, SwizzleComponent.Green, SwizzleComponent.Blue, SwizzleComponent.Alpha);
+        private uint _fgPendingWidth, _fgPendingHeight;
+        private double[] _fgPendingReprojection;
+        private bool _fgReset = true;
+        private int _fgCaptures;
+
+        private void BotwFrameGenBeforeUpscale()
+        {
+            TextureView color = null;
+
+            foreach (ResourceBindingSegment[] set in BotwProgram.BindingSegments)
+            {
+                foreach (ResourceBindingSegment segment in set)
+                {
+                    if (color == null && segment.Type is ResourceType.TextureAndSampler or ResourceType.Texture)
+                    {
+                        BotwFragmentTextures.TryGetValue(segment.Binding, out color);
+                    }
+                }
+            }
+
+            TextureView output = FramebufferParams?.GetColorView(0);
+            TextureView depth = BotwLastDepth;
+
+            if (color == null || output == null || depth == null || depth.Width != color.Width || depth.Height != color.Height)
+            {
+                return;
+            }
+
+            uint rw = (uint)color.Width, rh = (uint)color.Height;
+
+            EndRenderPass();
+            EnsureMotionTargets(rw, rh);
+
+            // No off-screen vectors for disoccluded pixels here: they keep DLSS-SR from reusing history, but frame
+            // generation interpolates along the vectors.
+            _fgPendingReprojection = UpdateMotionVectors(depth, rw, rh, offscreenDisocclusion: false);
+            Barrier();
+            BotwSignalCommandBufferChange();
+            (_fgPendingOutput, _fgPendingWidth, _fgPendingHeight) = (output, rw, rh);
+        }
+
+        protected override void BotwAfterDraw()
+        {
+            if (_fgPendingOutput == null)
+            {
+                return;
+            }
+
+            TextureView output = _fgPendingOutput;
+            _fgPendingOutput = null;
+            BotwFrameGenCapture(output, _fgPendingWidth, _fgPendingHeight, _fgPendingReprojection, default);
+        }
+
+        /// <summary>Copies the hud-less colour and publishes this frame's DLSS-G inputs for the present.</summary>
+        private void BotwFrameGenCapture(TextureView output, uint rw, uint rh, double[] reproject, System.Numerics.Vector2 jitter)
+        {
+            if (!_camExtended)
+            {
+                return; // no projection/camera for Streamline's constants
+            }
+
+            // The upscale target holds linear colour; the presented image is that colour sRGB-encoded into RGBA8 by the
+            // game's final copy (verified texel by texel with BOTWPC_DLSSG_DUMP). DLSS-G needs the hud-less colour in the
+            // back buffer's encoding, so it is drawn into an sRGB view (the hardware encodes) and tagged as RGBA8 UNORM.
+            if (_fgHudless == null || _fgHudless.Width != output.Width || _fgHudless.Height != output.Height)
+            {
+                _fgHudlessSrgb?.Release();
+                _fgHudless?.Release();
+                _fgHudless = Gd.CreateTextureView(HudlessInfo(output, Format.R8G8B8A8Unorm));
+                _fgHudlessSrgb = (TextureView)_fgHudless.CreateView(HudlessInfo(output, Format.R8G8B8A8Srgb), 0, 0);
+            }
+
+            EndRenderPass();
+            Gd.HelperShader.BlitColor(Gd, Cbs, output, _fgHudlessSrgb,
+                new Extents2D(0, 0, output.Width, output.Height), new Extents2D(0, 0, output.Width, output.Height), false);
+            Barrier();
+            BotwSignalCommandBufferChange();
+
+            DlssGInputs inputs = Gd.FrameGenInputs;
+            inputs.Depth = _dlssDepth[_dlssDepthIndex];
+            inputs.Motion = _dlssMotion;
+            inputs.Hudless = _fgHudless;
+            (inputs.RenderWidth, inputs.RenderHeight) = (rw, rh);
+            DlssG.BuildConstants(ref inputs.Constants, reproject, _camProjection, _camInverseView, _camNear, _camFar, rw, rh, jitter, _fgReset);
+            inputs.Valid = true;
+            _fgReset = false;
+
+            if (++_fgCaptures == 1)
+            {
+                Logger.Info?.Print(LogClass.Gpu, $"BOTW-PC DLSS-G: inputs {rw}x{rh} (depth, motion), hud-less {output.Width}x{output.Height} from {output.Info.Format}, " +
+                    $"near {_camNear} far {_camFar} fov {2 * Math.Atan(1 / _camProjection[5]) * 180 / Math.PI:0.#}°");
+            }
         }
     }
 }

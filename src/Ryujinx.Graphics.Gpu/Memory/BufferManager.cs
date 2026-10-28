@@ -929,7 +929,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
                         bool isWrite = (bounds.Flags & BufferUsageFlags.Write) == BufferUsageFlags.Write;
                         BufferRange range = isStorage
                             ? bufferCache.GetBufferRangeAligned(bounds.Range, bufferStage | BufferStageUtils.FromUsage(bounds.Flags), isWrite)
-                            : bufferCache.GetBufferRange(bounds.Range, bufferStage);
+                            : bufferCache.GetBufferRange(ClampUniform(bounds.Range, bindingInfo), bufferStage);
 
                         ranges[rangesCount++] = new BufferAssignment(bindingInfo.Binding, range);
                     }
@@ -966,7 +966,7 @@ namespace Ryujinx.Graphics.Gpu.Memory
                     bool isWrite = (bounds.Flags & BufferUsageFlags.Write) == BufferUsageFlags.Write;
                     BufferRange range = isStorage
                         ? bufferCache.GetBufferRangeAligned(bounds.Range, BufferStageUtils.ComputeStorage(bounds.Flags), isWrite)
-                        : bufferCache.GetBufferRange(bounds.Range, BufferStage.Compute);
+                        : bufferCache.GetBufferRange(isStorage ? bounds.Range : ClampUniform(bounds.Range, bindingInfo), BufferStage.Compute);
 
                     ranges[rangesCount++] = new BufferAssignment(bindingInfo.Binding, range);
                 }
@@ -1023,9 +1023,28 @@ namespace Ryujinx.Graphics.Gpu.Memory
                         Engine.FrontendStats.E(ReferenceEquals(bindings, _gpStorageBuffers) ? Engine.FrontendStats.Ev.StorageSync : Engine.FrontendStats.Ev.UniformSync);
                     }
 
-                    _channel.MemoryManager.Physical.BufferCache.SynchronizeBufferRange(bounds.Range);
+                    _channel.MemoryManager.Physical.BufferCache.SynchronizeBufferRange(
+                        ReferenceEquals(bindings, _gpUniformBuffers) ? ClampUniform(bounds.Range, binding) : bounds.Range);
                 }
             }
+        }
+
+        // Uniform buffer binding range clamped to what the bound shader can read (BufferDescriptor.UsedSize): smaller
+        // descriptor ranges, buffer synchronization and uniform mirrors. Experimental, off unless BOTWPC_UB_CLAMP=1 or
+        // compared in-run through BOTWPC_AB_SWITCHES.
+        private static readonly Ryujinx.Common.BotwPc.AbPhase.Switch _uniformClamp = new("BOTWPC_UB_CLAMP", experimental: true);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static MultiRange ClampUniform(MultiRange range, in BufferDescriptor bindingInfo)
+        {
+            int usedSize = bindingInfo.UsedSize;
+
+            if (usedSize > 0 && range.Count == 1 &&(ulong)usedSize < range.GetSubRange(0).Size && _uniformClamp.IsOn)
+            {
+                return range.Slice(0, (ulong)usedSize);
+            }
+
+            return range;
         }
 
         /// <summary>

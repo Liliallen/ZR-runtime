@@ -78,6 +78,16 @@ namespace Ryujinx.Ava.Systems
             Paused = paused;
             List<(string, string)> lines = [];
 
+            // DLSS Frame Generation: shown frames = game frames × frames shown per game frame (measured by Streamline).
+            float shown = DlssRuntime.FrameGenShownPerFrame;
+            // The BOTW-PC menu pauses the game (and generation): keep the values from before it opened.
+            float outputFps = paused ? Last.OutputFps : shown > 0 && fps > 0 ? fps * shown : 0;
+
+            if (mode >= HudMode.Detailed && shown > 0)
+            {
+                lines.Add(("Frame generation", $"{DlssRuntime.FrameGenFrames + 1}x · {shown:0.00} shown/frame"));
+            }
+
             if (mode >= HudMode.Detailed && seconds > 0)
             {
                 lines.Add(("GPU execution", gpuBusy > 0 ? $"{ms(gpuBusy):0.00} ms" : "n/a"));
@@ -103,6 +113,7 @@ namespace Ryujinx.Ava.Systems
             {
                 Mode = mode,
                 Fps = fps,
+                OutputFps = outputFps,
                 FrameMs = frameMs,
                 TargetFps = targetFps,
                 FrameTimes = mode >= HudMode.Detailed ? OverlayFrame.FrameTimes(120) : [],
@@ -113,9 +124,15 @@ namespace Ryujinx.Ava.Systems
         }
 
         public string MeasuredText(Func<string, string, string> t) =>
-            (Paused ? t("paused · before: ", "已暫停 · 暫停前：") : "") + $"{Last.Fps:0.0} FPS  ({Last.FrameMs:0.0} ms)";
+            (Paused ? t("paused · before: ", "已暫停 · 暫停前：") : "") + $"{Last.Fps:0.0} FPS  ({Last.FrameMs:0.0} ms)" +
+            (Last.OutputFps > 0 ? t($" → {Last.OutputFps:0} shown", $" → 畫面 {Last.OutputFps:0}") : "");
 
         public bool BelowTarget(float target) => target > 0 && Last.Fps > 0 && Last.Fps < target * 0.9f;
+
+        public string FrameGenerationText(Func<string, string, string> t) =>
+            (Paused ? t("before the menu: ", "開選單前：") : "") + (Last.OutputFps > 0
+                ? t($"game {Last.Fps:0} → shown {Last.OutputFps:0} FPS", $"遊戲 {Last.Fps:0} → 畫面 {Last.OutputFps:0} FPS")
+                : t($"game {Last.Fps:0} FPS, no generated frames", $"遊戲 {Last.Fps:0} FPS，沒有補幀"));
 
         public string GameSpeedText() => float.IsNaN(_gameSpeed) ? "n/a" : $"{_gameSpeed:0.00}";
 

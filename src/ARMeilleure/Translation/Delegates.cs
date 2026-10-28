@@ -96,6 +96,12 @@ namespace ARMeilleure.Translation
             SetDelegateInfo(typeof(NativeInterface).GetMethod(nameof(NativeInterface.ReadVector128)));
             SetDelegateInfo(typeof(NativeInterface).GetMethod(nameof(NativeInterface.SignalMemoryTracking)));
             SetDelegateInfo(typeof(NativeInterface).GetMethod(nameof(NativeInterface.SupervisorCall)));
+
+            // BOTW-PC test aid: only with probes set, so the delegate indices stored in PPTC caches stay unchanged otherwise.
+            if (Diagnostics.GuestProbe.Enabled)
+            {
+                SetDelegateInfo(typeof(NativeInterface).GetMethod(nameof(NativeInterface.Probe)));
+            }
             SetDelegateInfo(typeof(NativeInterface).GetMethod(nameof(NativeInterface.ThrowInvalidMemoryAccess)));
             SetDelegateInfo(typeof(NativeInterface).GetMethod(nameof(NativeInterface.Undefined)));
             SetDelegateInfo(typeof(NativeInterface).GetMethod(nameof(NativeInterface.WriteByte)));

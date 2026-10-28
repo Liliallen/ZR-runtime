@@ -55,6 +55,13 @@ namespace Ryujinx.Common.BotwPc
         /// <summary>Glyphs for in-game button prompts; they always follow the active mapping.</summary>
         public PromptStyle Prompts { get; set; } = PromptStyle.Auto;
         public PromptPriority PromptPriority { get; set; } = PromptPriority.BuiltIn;
+
+        /// <summary>
+        /// Name of the controller last auto-assigned to Player 1. When it is not connected yet at game start (a wireless
+        /// pad switched on after launch, or SDL still enumerating), the prompts are generated for it, since the game reads
+        /// them only once.
+        /// </summary>
+        public string LastController { get; set; } = "";
     }
 
     /// <summary>Where Player 1's motion (gyroscope/accelerometer) data comes from.</summary>
@@ -141,6 +148,9 @@ namespace Ryujinx.Common.BotwPc
 
         /// <summary>Runtime V2 GPU front end: the optimized components plus the GPU V2 ones (GPU_FRONTEND_V2.md).</summary>
         V2,
+
+        /// <summary>Runtime V3 GPU front end: V2 plus the GPU V3 components (GPU_FRONTEND_V3.md).</summary>
+        V3,
     }
 
     /// <summary>Legacy (Ryujinx) or Runtime V2 implementation of a runtime component.</summary>
@@ -148,6 +158,9 @@ namespace Ryujinx.Common.BotwPc
     {
         Legacy,
         V2,
+
+        /// <summary>Runtime V3 (RUNTIME_V3_ARCHITECTURE.md): V2 plus the V3 changes of that component.</summary>
+        V3,
     }
 
     /// <summary>How far CPU V2 may rely on the AArch64 procedure call standard (CPU_V2_JIT.md).</summary>
@@ -166,7 +179,7 @@ namespace Ryujinx.Common.BotwPc
     /// <summary>
     /// Runtime V2 component selection (RUNTIME_V2_ARCHITECTURE.md). Every component takes effect at the next game start;
     /// environment variables override the file for benchmarks: BOTWPC_CPU_CORE, BOTWPC_CPU_V2_ABI,
-    /// BOTWPC_MEMORY_TRACKING, BOTWPC_HLE_SCHEDULER (legacy|v2), BOTWPC_CPU_V2_FEATURES (hex, experiments only).
+    /// BOTWPC_MEMORY_TRACKING, BOTWPC_HLE_SCHEDULER (legacy|v2|v3), BOTWPC_CPU_V2_FEATURES (hex, experiments only).
     /// The GPU front end stays in <see cref="GraphicsSettings.GpuFrontend"/>.
     /// </summary>
     public class RuntimeSettings
@@ -224,6 +237,50 @@ namespace Ryujinx.Common.BotwPc
 
         /// <summary>BOTWPC_DLSS overrides the setting (the overlay shows the option as fixed).</summary>
         public static bool DlssOverridden => _dlssOverride != null;
+
+        /// <summary>
+        /// NVIDIA DLSS Frame Generation through Streamline (experimental, RTX 40/50): 2x inserts one generated frame per
+        /// game frame, 3x/4x (RTX 50) two or three. BOTWPC_DLSSG=off|2x|3x|4x overrides it. Takes effect at the next start
+        /// (Streamline has to be loaded before Vulkan).
+        /// </summary>
+        public FrameGenerationMode FrameGeneration { get; set; } = FrameGenerationMode.Off;
+
+        /// <summary>
+        /// Shown-frame limit while frame generation runs (0 = none): DLSS-G on Vulkan has no VSync, so keep it under the
+        /// display's refresh rate (e.g. 160 on 165 Hz). BOTWPC_DLSSG_FPS overrides it.
+        /// </summary>
+        public int FrameGenerationFpsLimit { get; set; }
+
+        /// <summary>Shown-frame limit in effect: BOTWPC_DLSSG_FPS if set, else the setting.</summary>
+        public static int EffectiveFrameGenerationFpsLimit =>
+            int.TryParse(Environment.GetEnvironmentVariable("BOTWPC_DLSSG_FPS"), out int fps) && fps >= 0 ? fps : BotwPcSettings.Instance.Graphics.FrameGenerationFpsLimit;
+
+        /// <summary>BOTWPC_DLSSG overrides the frame-generation setting at start (the overlay says so).</summary>
+        public static bool FrameGenerationOverridden => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("BOTWPC_DLSSG"));
+
+        /// <summary>Generated frames per game frame (0 = off): BOTWPC_DLSSG if set, else the setting.</summary>
+        public static int EffectiveFrameGeneration => (Environment.GetEnvironmentVariable("BOTWPC_DLSSG")?.ToLowerInvariant() switch
+        {
+            "off" or "0" => FrameGenerationMode.Off,
+            "on" or "2x" or "2" => FrameGenerationMode.X2,
+            "3x" or "3" => FrameGenerationMode.X3,
+            "4x" or "4" => FrameGenerationMode.X4,
+            _ => BotwPcSettings.Instance.Graphics.FrameGeneration,
+        }) switch
+        {
+            FrameGenerationMode.X2 => 1,
+            FrameGenerationMode.X3 => 2,
+            FrameGenerationMode.X4 => 3,
+            _ => 0,
+        };
+    }
+
+    public enum FrameGenerationMode
+    {
+        Off,
+        X2,
+        X3,
+        X4,
     }
 
     public enum PerformanceHud
@@ -250,6 +307,16 @@ namespace Ryujinx.Common.BotwPc
 
         /// <summary>How long a single stick click waits for the other one (L3 + R3) before it reaches the game.</summary>
         public int ChordWindowMs { get; set; } = 80;
+
+        /// <summary>Menu language: Auto follows Ryujinx's UI language. BOTWPC_OVERLAY_LANG=en|zh overrides it.</summary>
+        public MenuLanguage Language { get; set; } = MenuLanguage.Auto;
+    }
+
+    public enum MenuLanguage
+    {
+        Auto,
+        English,
+        Chinese,
     }
 
     public class ModSettings

@@ -108,7 +108,20 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
                 }
                 else if (storageKind == StorageKind.ConstantBuffer && operation.GetSource(0).Type == OperandType.Constant)
                 {
-                    context.ResourceManager.SetUsedConstantBufferBinding(operation.GetSource(0).Value);
+                    // Game constant buffer loads are (binding, 0, vector index, element index): a constant vector index
+                    // bounds what the shader reads. Anything else (dynamic index, support buffer fields) is unbounded.
+                    int endByte = int.MaxValue;
+
+                    if (inst == Instruction.Load &&
+                        operation.SourcesCount == 4 &&
+                        operation.GetSource(1).Type == OperandType.Constant &&
+                        operation.GetSource(1).Value == 0 &&
+                        operation.GetSource(2).Type == OperandType.Constant)
+                    {
+                        endByte = (operation.GetSource(2).Value + 1) * 16;
+                    }
+
+                    context.ResourceManager.SetUsedConstantBufferBinding(operation.GetSource(0).Value, endByte);
                 }
             }
 

@@ -176,7 +176,7 @@ namespace Ryujinx.Memory.Tracking
                     // Submit handles scanned until the gap as dirty
                     if (rgSize != 0)
                     {
-                        modifiedAction(rgStart, rgSize);
+                        MemoryTracking.InvokeFlushed(modifiedAction, rgStart, rgSize);
                         rgSize = 0;
                     }
 
@@ -215,44 +215,53 @@ namespace Ryujinx.Memory.Tracking
                 return;
             }
 
-            ulong rgSize = 0;
+            bool deferred = MemoryTracking.BeginDeferredReprotect();
 
-            long[] masks = _dirtyBitmap.Masks;
-
-            int startIndex = startHandle >> ConcurrentBitmap.IntShift;
-            int startBit = startHandle & ConcurrentBitmap.IntMask;
-            long startMask = -1L << startBit;
-
-            int endIndex = lastHandle >> ConcurrentBitmap.IntShift;
-            int endBit = lastHandle & ConcurrentBitmap.IntMask;
-            long endMask = (long)(ulong.MaxValue >> (ConcurrentBitmap.IntMask - endBit));
-
-            long startValue = Volatile.Read(ref masks[startIndex]);
-
-            int baseBit = startIndex << ConcurrentBitmap.IntShift;
-            int prevHandle = startHandle - 1;
-
-            if (startIndex == endIndex)
+            try
             {
-                ParseDirtyBits(startValue & startMask & endMask, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
-            }
-            else
-            {
-                ParseDirtyBits(startValue & startMask, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+                ulong rgSize = 0;
 
-                for (int i = startIndex + 1; i < endIndex; i++)
+                long[] masks = _dirtyBitmap.Masks;
+
+                int startIndex = startHandle >> ConcurrentBitmap.IntShift;
+                int startBit = startHandle & ConcurrentBitmap.IntMask;
+                long startMask = -1L << startBit;
+
+                int endIndex = lastHandle >> ConcurrentBitmap.IntShift;
+                int endBit = lastHandle & ConcurrentBitmap.IntMask;
+                long endMask = (long)(ulong.MaxValue >> (ConcurrentBitmap.IntMask - endBit));
+
+                long startValue = Volatile.Read(ref masks[startIndex]);
+
+                int baseBit = startIndex << ConcurrentBitmap.IntShift;
+                int prevHandle = startHandle - 1;
+
+                if (startIndex == endIndex)
                 {
-                    ParseDirtyBits(Volatile.Read(ref masks[i]), ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+                    ParseDirtyBits(startValue & startMask & endMask, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+                }
+                else
+                {
+                    ParseDirtyBits(startValue & startMask, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+
+                    for (int i = startIndex + 1; i < endIndex; i++)
+                    {
+                        ParseDirtyBits(Volatile.Read(ref masks[i]), ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+                    }
+
+                    long endValue = Volatile.Read(ref masks[endIndex]);
+
+                    ParseDirtyBits(endValue & endMask, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
                 }
 
-                long endValue = Volatile.Read(ref masks[endIndex]);
-
-                ParseDirtyBits(endValue & endMask, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+                if (rgSize != 0)
+                {
+                    MemoryTracking.InvokeFlushed(modifiedAction, rgStart, rgSize);
+                }
             }
-
-            if (rgSize != 0)
+            finally
             {
-                modifiedAction(rgStart, rgSize);
+                MemoryTracking.EndDeferredReprotect(deferred);
             }
         }
 
@@ -279,7 +288,7 @@ namespace Ryujinx.Memory.Tracking
                     // Submit handles scanned until the gap as dirty
                     if (rgSize != 0)
                     {
-                        modifiedAction(rgStart, rgSize);
+                        MemoryTracking.InvokeFlushed(modifiedAction, rgStart, rgSize);
                         rgSize = 0;
                     }
 
@@ -342,46 +351,55 @@ namespace Ryujinx.Memory.Tracking
                 return;
             }
 
-            ulong rgSize = 0;
+            bool deferred = MemoryTracking.BeginDeferredReprotect();
 
-            long[] seqMasks = _sequenceNumberBitmap.Masks;
-            long[] checkedMasks = _dirtyCheckedBitmap.Masks;
-            long[] masks = _dirtyBitmap.Masks;
-
-            int startIndex = startHandle >> ConcurrentBitmap.IntShift;
-            int startBit = startHandle & ConcurrentBitmap.IntMask;
-            long startMask = -1L << startBit;
-
-            int endIndex = lastHandle >> ConcurrentBitmap.IntShift;
-            int endBit = lastHandle & ConcurrentBitmap.IntMask;
-            long endMask = (long)(ulong.MaxValue >> (ConcurrentBitmap.IntMask - endBit));
-
-            long startValue = Volatile.Read(ref masks[startIndex]);
-
-            int baseBit = startIndex << ConcurrentBitmap.IntShift;
-            int prevHandle = startHandle - 1;
-
-            if (startIndex == endIndex)
+            try
             {
-                ParseDirtyBits(startValue, startMask & endMask, startIndex, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
-            }
-            else
-            {
-                ParseDirtyBits(startValue, startMask, startIndex, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+                ulong rgSize = 0;
 
-                for (int i = startIndex + 1; i < endIndex; i++)
+                long[] seqMasks = _sequenceNumberBitmap.Masks;
+                long[] checkedMasks = _dirtyCheckedBitmap.Masks;
+                long[] masks = _dirtyBitmap.Masks;
+
+                int startIndex = startHandle >> ConcurrentBitmap.IntShift;
+                int startBit = startHandle & ConcurrentBitmap.IntMask;
+                long startMask = -1L << startBit;
+
+                int endIndex = lastHandle >> ConcurrentBitmap.IntShift;
+                int endBit = lastHandle & ConcurrentBitmap.IntMask;
+                long endMask = (long)(ulong.MaxValue >> (ConcurrentBitmap.IntMask - endBit));
+
+                long startValue = Volatile.Read(ref masks[startIndex]);
+
+                int baseBit = startIndex << ConcurrentBitmap.IntShift;
+                int prevHandle = startHandle - 1;
+
+                if (startIndex == endIndex)
                 {
-                    ParseDirtyBits(Volatile.Read(ref masks[i]), -1L, i, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+                    ParseDirtyBits(startValue, startMask & endMask, startIndex, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+                }
+                else
+                {
+                    ParseDirtyBits(startValue, startMask, startIndex, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+
+                    for (int i = startIndex + 1; i < endIndex; i++)
+                    {
+                        ParseDirtyBits(Volatile.Read(ref masks[i]), -1L, i, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+                    }
+
+                    long endValue = Volatile.Read(ref masks[endIndex]);
+
+                    ParseDirtyBits(endValue, endMask, endIndex, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
                 }
 
-                long endValue = Volatile.Read(ref masks[endIndex]);
-
-                ParseDirtyBits(endValue, endMask, endIndex, seqMasks, checkedMasks, ref baseBit, ref prevHandle, ref rgStart, ref rgSize, modifiedAction);
+                if (rgSize != 0)
+                {
+                    MemoryTracking.InvokeFlushed(modifiedAction, rgStart, rgSize);
+                }
             }
-
-            if (rgSize != 0)
+            finally
             {
-                modifiedAction(rgStart, rgSize);
+                MemoryTracking.EndDeferredReprotect(deferred);
             }
         }
 

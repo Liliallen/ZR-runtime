@@ -348,7 +348,7 @@ namespace Ryujinx.Graphics.Vulkan
                 RenderTargetCensus.OnDraw(vertexCount);
             }
 
-            if (vertexCount == 0 || (Dlss.Available && BotwDlssReplaceDraw(vertexCount)))
+            if (vertexCount == 0 || (BotwTracking && BotwDlssReplaceDraw(vertexCount)))
             {
                 return;
             }
@@ -395,6 +395,11 @@ namespace Ryujinx.Graphics.Vulkan
 
                 Gd.Api.CmdDraw(CommandBuffer, (uint)vertexCount, (uint)instanceCount, (uint)firstVertex, (uint)firstInstance);
             }
+
+            if (BotwTracking)
+            {
+                BotwAfterDraw();
+            }
         }
 
         private void UpdateIndexBufferPattern()
@@ -439,7 +444,7 @@ namespace Ryujinx.Graphics.Vulkan
                 RenderTargetCensus.OnDraw(indexCount);
             }
 
-            if (indexCount == 0 || (Dlss.Available && BotwDlssReplaceDraw(indexCount)))
+            if (indexCount == 0 || (BotwTracking && BotwDlssReplaceDraw(indexCount)))
             {
                 return;
             }
@@ -483,6 +488,11 @@ namespace Ryujinx.Graphics.Vulkan
                 ResumeTransformFeedbackInternal();
 
                 Gd.Api.CmdDrawIndexed(CommandBuffer, (uint)indexCount, (uint)instanceCount, (uint)firstIndex, firstVertex, (uint)firstInstance);
+            }
+
+            if (BotwTracking)
+            {
+                BotwAfterDraw();
             }
         }
 
@@ -1146,7 +1156,7 @@ namespace Ryujinx.Graphics.Vulkan
                 RenderTargetCensus.OnSetRenderTargets(colors, depthStencil);
             }
 
-            if (Dlss.Available && depthStencil is TextureView depthView && depthView.Info.Format == GAL.Format.D32Float)
+            if (BotwTracking && depthStencil is TextureView depthView && depthView.Info.Format == GAL.Format.D32Float)
             {
                 BotwLastDepth = depthView;
             }
@@ -1220,7 +1230,7 @@ namespace Ryujinx.Graphics.Vulkan
                 RenderTargetCensus.OnSetTexture(binding, texture);
             }
 
-            if (Dlss.Available && stage == ShaderStage.Fragment)
+            if (BotwTracking && stage == ShaderStage.Fragment)
             {
                 BotwFragmentTextures[binding] = texture as TextureView;
             }
@@ -1235,7 +1245,7 @@ namespace Ryujinx.Graphics.Vulkan
                 RenderTargetCensus.OnSetTexture(binding, texture);
             }
 
-            if (Dlss.Available && stage == ShaderStage.Fragment)
+            if (BotwTracking && stage == ShaderStage.Fragment)
             {
                 BotwFragmentTextures[binding] = texture as TextureView;
             }
@@ -1901,6 +1911,7 @@ namespace Ryujinx.Graphics.Vulkan
         {
             if (!RenderPassActive)
             {
+                Ryujinx.Common.BotwPc.GpuCounters.Add(Ryujinx.Common.BotwPc.GpuCounters.Id.RenderPassBegins);
                 FramebufferParams.InsertLoadOpBarriers(Gd, Cbs);
 
                 Rect2D renderArea = new(null, new Extent2D(FramebufferParams.Width, FramebufferParams.Height));

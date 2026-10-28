@@ -29,6 +29,170 @@ namespace Ryujinx.Memory.Tracking
         internal object TrackingLock = new();
 
         /// <summary>
+        /// BOTW-PC Memory V3 (MEMORY_TRACKING_V3.md): while a multi-region dirty scan re-arms handles, the protection
+        /// changes are recorded instead of applied one region at a time, and applied just before the scan hands a range
+        /// to its caller (which then reads the memory). Adjacent regions that end up with the same permission are
+        /// protected with one call. The permissions applied are the regions' current ones, looked up again under
+        /// <see cref="TrackingLock"/> at flush time, so a concurrent change of a region (split, removal, signal) is never
+        /// overwritten with a stale permission. A write that lands before the flush is still read by the caller.
+        /// </summary>
+        /// Rejected in measurement (in-run A/B -0.85 FPS): experiment only, BOTWPC_MEM_COALESCE=1 with memory tracking V3.
+        private static readonly Ryujinx.Common.BotwPc.AbPhase.Switch _coalesceSwitch = new("BOTWPC_MEM_COALESCE", experimental: true);
+
+        public static bool CoalesceReprotects => Ryujinx.Common.BotwPc.RuntimeV2.MemoryV3 && _coalesceSwitch.IsOn;
+
+        private sealed class DeferredReprotect
+        {
+            public int Depth;
+            public readonly List<(MemoryTracking Tracking, bool Guest, ulong Address, ulong Size)> Ranges = [];
+        }
+
+        [ThreadStatic]
+        private static DeferredReprotect t_deferred;
+
+        /// <summary>Starts recording protection changes on this thread (Memory V3); returns whether it did.</summary>
+        internal static bool BeginDeferredReprotect()
+        {
+            if (!CoalesceReprotects)
+            {
+                return false;
+            }
+
+            (t_deferred ??= new DeferredReprotect()).Depth++;
+
+            return true;
+        }
+
+        /// <summary>Applies the recorded protection changes (call before the protected memory is read).</summary>
+        internal static void FlushDeferredReprotect()
+        {
+            DeferredReprotect deferred = t_deferred;
+
+            if (deferred == null || deferred.Ranges.Count == 0)
+            {
+                return;
+            }
+
+            List<(MemoryTracking Tracking, bool Guest, ulong Address, ulong Size)> ranges = deferred.Ranges;
+
+            if (ranges.Count > 1)
+            {
+                ranges.Sort((a, b) => a.Guest != b.Guest ? a.Guest.CompareTo(b.Guest) : a.Address.CompareTo(b.Address));
+            }
+
+            int i = 0;
+
+            while (i < ranges.Count)
+            {
+                MemoryTracking tracking = ranges[i].Tracking;
+                bool guest = ranges[i].Guest;
+                ulong start = ranges[i].Address;
+                ulong end = start + ranges[i].Size;
+                int j = i + 1;
+
+                while (j < ranges.Count && ranges[j].Tracking == tracking && ranges[j].Guest == guest && ranges[j].Address <= end)
+                {
+                    end = Math.Max(end, ranges[j].Address + ranges[j].Size);
+                    j++;
+                }
+
+                tracking.ApplyCurrentProtection(start, end - start, guest, j - i);
+                i = j;
+            }
+
+            ranges.Clear();
+        }
+
+        /// <summary>Applies the recorded changes, then runs the caller's action with recording suspended, so protection
+        /// changes made by the action itself take effect immediately as usual.</summary>
+        internal static void InvokeFlushed(Action<ulong, ulong> action, ulong address, ulong size)
+        {
+            DeferredReprotect deferred = t_deferred;
+
+            if (deferred == null || deferred.Depth == 0)
+            {
+                action(address, size);
+
+                return;
+            }
+
+            FlushDeferredReprotect();
+
+            int depth = deferred.Depth;
+            deferred.Depth = 0;
+
+            try
+            {
+                action(address, size);
+            }
+            finally
+            {
+                deferred.Depth = depth;
+            }
+        }
+
+        internal static void EndDeferredReprotect(bool begun)
+        {
+            if (begun)
+            {
+                FlushDeferredReprotect();
+                t_deferred.Depth--;
+            }
+        }
+
+        private void ApplyCurrentProtection(ulong address, ulong size, bool guest, int recorded)
+        {
+            lock (TrackingLock)
+            {
+                NonOverlappingRangeList<VirtualRegion> regions = guest ? _guestVirtualRegions : _virtualRegions;
+
+                regions.Lock.EnterReadLock();
+                RangeItem<VirtualRegion>[] overlaps = regions.FindOverlapsAsArray(address, size);
+                regions.Lock.ExitReadLock();
+
+                int k = 0;
+                int calls = 0;
+
+                while (k < overlaps.Length)
+                {
+                    VirtualRegion first = overlaps[k].Value;
+                    MemoryPermission permission = first.LastPermission;
+                    ulong runStart = first.Address;
+                    ulong runEnd = first.EndAddress;
+                    k++;
+
+                    while (k < overlaps.Length && overlaps[k].Value.Address == runEnd && overlaps[k].Value.LastPermission == permission)
+                    {
+                        runEnd = overlaps[k].Value.EndAddress;
+                        k++;
+                    }
+
+                    if (permission != MemoryPermission.Invalid)
+                    {
+                        if (Ryujinx.Common.BotwPc.GpuCounters.Detailed)
+                        {
+                            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                            _memoryManager.TrackingReprotect(runStart, runEnd - runStart, permission, guest);
+                            Ryujinx.Common.BotwPc.GpuCounters.AddElapsed(Ryujinx.Common.BotwPc.GpuCounters.Id.Reprotects, Ryujinx.Common.BotwPc.GpuCounters.Id.ReprotectTicks, t0);
+                        }
+                        else
+                        {
+                            _memoryManager.TrackingReprotect(runStart, runEnd - runStart, permission, guest);
+                        }
+
+                        calls++;
+                    }
+                }
+
+                if (Ryujinx.Common.BotwPc.GpuCounters.Detailed)
+                {
+                    Ryujinx.Common.BotwPc.GpuCounters.Add(Ryujinx.Common.BotwPc.GpuCounters.Id.ReprotectsDeferred, recorded);
+                    Ryujinx.Common.BotwPc.GpuCounters.Add(Ryujinx.Common.BotwPc.GpuCounters.Id.ReprotectsCoalesced, calls);
+                }
+            }
+        }
+
+        /// <summary>
         /// Create a new tracking structure for the given "physical" memory block,
         /// with a given "virtual" memory manager that will provide mappings and virtual memory protection.
         /// </summary>
@@ -365,6 +529,16 @@ namespace Ryujinx.Memory.Tracking
         /// <param name="guest">True if the protection is for guest access, false otherwise</param>
         internal void ProtectVirtualRegion(VirtualRegion region, MemoryPermission permission, bool guest)
         {
+            DeferredReprotect deferred = t_deferred;
+
+            if (deferred != null && deferred.Depth > 0)
+            {
+                // Memory V3: applied by FlushDeferredReprotect, before the caller reads the memory.
+                deferred.Ranges.Add((this, guest, region.Address, region.Size));
+
+                return;
+            }
+
             if (Ryujinx.Common.BotwPc.GpuCounters.Detailed)
             {
                 long start = System.Diagnostics.Stopwatch.GetTimestamp();

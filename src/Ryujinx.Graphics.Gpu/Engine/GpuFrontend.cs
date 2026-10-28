@@ -20,10 +20,13 @@ namespace Ryujinx.Graphics.Gpu.Engine
         private static readonly string _mode = SelectMode();
 
         /// <summary>Round 5 optimized components (also part of GPU V2).</summary>
-        public static readonly bool Optimized = _mode is "optimized" or "v2";
+        public static readonly bool Optimized = _mode is "optimized" or "v2" or "v3";
 
         /// <summary>Runtime V2 GPU front end: the optimized components plus the GPU V2 ones (GPU_FRONTEND_V2.md).</summary>
-        public static readonly bool V2 = _mode == "v2";
+        public static readonly bool V2 = _mode is "v2" or "v3";
+
+        /// <summary>Runtime V3 GPU front end: V2 plus the GPU V3 components (GPU_FRONTEND_V3.md).</summary>
+        public static readonly bool V3 = _mode == "v3";
 
         private static string SelectMode()
         {
@@ -38,6 +41,7 @@ namespace Ryujinx.Graphics.Gpu.Engine
             {
                 "optimized" => "optimized",
                 "v2" => "v2",
+                "v3" => "v3",
                 _ => "legacy",
             };
 
@@ -51,6 +55,14 @@ namespace Ryujinx.Graphics.Gpu.Engine
 
         /// <summary>Direct dispatch of 3D register writes and macro calls from the command stream (GPFifoProcessor).</summary>
         public static bool FastDispatch => Optimized && _fastDispatch.IsOn;
+
+        private static readonly AbPhase.Switch _shaderCodeWatch = new("BOTWPC_FE_SHADER_WATCH", experimental: true);
+
+        /// <summary>GPU V3 (rejected, experiment only: BOTWPC_FE_SHADER_WATCH=1): a cached shader stage whose code memory
+        /// has not been written (memory tracking handle clean, GPU mapping unchanged) since its last byte comparison is
+        /// not compared again (ShaderCache.IsShaderEqual). In-run A/B: +0.07 FPS (n.s.), 1 % low -1.8 FPS
+        /// (GPU_FRONTEND_V3.md).</summary>
+        public static bool ShaderCodeWatch => V3 && _shaderCodeWatch.IsOn;
     }
 
     /// <summary>
@@ -69,6 +81,7 @@ namespace Ryujinx.Graphics.Gpu.Engine
         {
             FastWrite,
             MacroHle,
+            ShaderCodeWatch,
             Count,
         }
 

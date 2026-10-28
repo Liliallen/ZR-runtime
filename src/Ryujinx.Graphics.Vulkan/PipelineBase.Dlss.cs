@@ -5,7 +5,10 @@ namespace Ryujinx.Graphics.Vulkan
 {
     partial class PipelineBase
     {
-        // BOTW-PC DLSS: state the DLSS pass needs (tracked only when DLSS is available).
+        /// <summary>DLSS Super Resolution or DLSS Frame Generation needs the upscale pass's inputs tracked.</summary>
+        protected static bool BotwTracking => Dlss.Available || DlssG.Available;
+
+        // BOTW-PC DLSS: state the DLSS pass needs (tracked only when DLSS or DLSS-G is available).
         protected readonly Dictionary<int, TextureView> BotwFragmentTextures = [];
         protected TextureView BotwLastDepth;
         protected ShaderCollection BotwProgram => _program;
@@ -20,6 +23,9 @@ namespace Ryujinx.Graphics.Vulkan
 
         /// <summary>Replaces the draw with DLSS when it is the game's upscale; returns true if it did.</summary>
         protected virtual bool BotwDlssReplaceDraw(int vertexCount) => false;
+
+        /// <summary>Called after every recorded draw while tracking (DLSS-G captures the hud-less colour here).</summary>
+        protected virtual void BotwAfterDraw() { }
 
         protected void BotwSignalCommandBufferChange() => SignalCommandBufferChange();
 

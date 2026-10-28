@@ -45,9 +45,12 @@ namespace Ryujinx.Common.BotwPc
             private readonly bool _enabled;
             private readonly bool _phased;
 
-            public Switch(string variable)
+            public Switch(string variable, bool experimental = false)
             {
-                _enabled = Environment.GetEnvironmentVariable(variable) != "0";
+                // Experimental switches (rejected components kept for re-measurement) are off unless set to "1" or
+                // compared in-run through BOTWPC_AB_SWITCHES.
+                string value = Environment.GetEnvironmentVariable(variable);
+                _enabled = experimental ? value == "1" || Array.IndexOf((Environment.GetEnvironmentVariable("BOTWPC_AB_SWITCHES") ?? "").Split(','), variable) >= 0 : value != "0";
                 _phased = _periodTicks != 0 && Array.IndexOf((Environment.GetEnvironmentVariable("BOTWPC_AB_SWITCHES") ?? "").Split(','), variable) >= 0;
             }
 

@@ -56,6 +56,27 @@ namespace Ryujinx.Tests.BotwPc
         }
 
         [Test]
+        public void PromptsFollowTheLastControllerBeforeItConnects()
+        {
+            var settings = new ControllerSettings { LastController = "Xbox Series X Controller" };
+
+            // No pad connected at game start (no driver, no saved pad): the prompts are made for the last auto-assigned pad.
+            var predicted = AutoController.ResolvePrompts([], null, settings, out string reason);
+            Assert.That(predicted, Is.Not.Null, reason);
+            Assert.That(predicted.Get(SwitchButton.A), Is.EqualTo(Ryujinx.Common.Configuration.Hid.Controller.GamepadInputId.B));
+            Assert.That(predicted.Get(SwitchButton.X), Is.EqualTo(Ryujinx.Common.Configuration.Hid.Controller.GamepadInputId.Y));
+
+            // ...and match the automatic config that runs once it connects, so the prompts are not stale.
+            var connected = ButtonPrompts.FromConfig(AutoController.Build("0-xbox", settings.LastController, settings, false), settings.Prompts, out _);
+            Assert.That(predicted.Key, Is.EqualTo(connected.Key));
+
+            Assert.That(AutoController.ResolvePrompts([], null, new ControllerSettings(), out _), Is.Null);
+            Assert.That(AutoController.ResolvePrompts([], null, new ControllerSettings { LastController = "Xbox", Prompts = PromptStyle.Original }, out _), Is.Null);
+            Assert.That(AutoController.ResolvePrompts([], null, new ControllerSettings { LastController = "Xbox", AutoAssign = false }, out _), Is.Null);
+            Assert.That(AutoController.ResolvePrompts([], null, new ControllerSettings { LastController = "Nintendo Switch Pro Controller" }, out _), Is.Null);
+        }
+
+        [Test]
         public void SettingsAreClamped()
         {
             var config = AutoController.Build("0", "Xbox", new ControllerSettings { DeadzoneLeft = 5f, RumbleStrength = -1f, TriggerThreshold = 0f }, false);

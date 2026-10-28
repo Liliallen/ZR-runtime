@@ -45,6 +45,7 @@ namespace ARMeilleure.Translation.PTC
         public static readonly Symbol CountTableSymbol = new(SymbolType.Special, 2);
         public static readonly Symbol DispatchStubSymbol = new(SymbolType.Special, 3);
         public static readonly Symbol FunctionTableSymbol = new(SymbolType.Special, 4);
+        public static readonly Symbol SyncCheckStubSymbol = new(SymbolType.Special, 5);
 
         private const byte FillingByte = 0x00;
         private const CompressionLevel SaveCompressionLevel = CompressionLevel.Fastest;
@@ -109,6 +110,10 @@ namespace ARMeilleure.Translation.PTC
 
             Profiler.Wait();
             Profiler.ClearEntries();
+
+            // BOTW-PC: probes add a delegate (shifting the indices cached code calls through) and are only emitted by fresh
+            // translations, so a cache must neither be loaded nor saved while they are set.
+            enabled &= !Diagnostics.GuestProbe.Enabled;
 
             Logger.Info?.Print(LogClass.Ptc, $"Initializing Profiled Persistent Translation Cache (enabled: {enabled}).");
 
@@ -753,6 +758,10 @@ namespace ARMeilleure.Translation.PTC
                 else if (symbol == FunctionTableSymbol)
                 {
                     imm = translator.FunctionTable.Base;
+                }
+                else if (symbol == SyncCheckStubSymbol)
+                {
+                    imm = translator.Stubs.SyncCheckStub;
                 }
 
                 if (imm == null)

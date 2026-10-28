@@ -1208,8 +1208,16 @@ namespace ARMeilleure.CodeGen.RegisterAllocators
 
                     if (node.Instruction == Instruction.Call)
                     {
-                        AddIntervalCallerSavedReg(context.Masks.IntCallerSavedRegisters, operationPos, RegisterType.Integer);
-                        AddIntervalCallerSavedReg(context.Masks.VecCallerSavedRegisters, operationPos, RegisterType.Vector);
+                        if (IsPreservingCall(node))
+                        {
+                            // CPU V3: the stub preserves every register but RAX (x86-64, register 0).
+                            AddIntervalCallerSavedReg(1 << 0, operationPos, RegisterType.Integer);
+                        }
+                        else
+                        {
+                            AddIntervalCallerSavedReg(context.Masks.IntCallerSavedRegisters, operationPos, RegisterType.Integer);
+                            AddIntervalCallerSavedReg(context.Masks.VecCallerSavedRegisters, operationPos, RegisterType.Vector);
+                        }
                     }
 
                     void VisitSource(Operand source)
@@ -1256,6 +1264,30 @@ namespace ARMeilleure.CodeGen.RegisterAllocators
             {
                 interval.Reset();
             }
+        }
+
+        /// <summary>CPU V3: a call to the register-preserving synchronization stub (through the constant copy the
+        /// pre-allocator inserts for the call target).</summary>
+        private static bool IsPreservingCall(Operation node)
+        {
+            if (!CpuV2.Has(CpuV2Features.PreservingSyncCall) || node.SourcesCount != 1)
+            {
+                return false;
+            }
+
+            Operand target = node.GetSource(0);
+
+            if (target.Kind == OperandKind.LocalVariable && target.AssignmentsCount == 1)
+            {
+                Operation def = target.Assignments[0];
+
+                if (def.Instruction == Instruction.Copy)
+                {
+                    target = def.GetSource(0);
+                }
+            }
+
+            return target.Kind == OperandKind.Constant && target.Symbol == Translation.PTC.Ptc.SyncCheckStubSymbol;
         }
 
         private void AddIntervalCallerSavedReg(int mask, int operationPos, RegisterType regType)

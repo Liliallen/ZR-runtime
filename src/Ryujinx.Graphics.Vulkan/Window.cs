@@ -10,7 +10,7 @@ using VkFormat = Silk.NET.Vulkan.Format;
 
 namespace Ryujinx.Graphics.Vulkan
 {
-    class Window : WindowBase, IDisposable
+    partial class Window : WindowBase, IDisposable
     {
         private const int SurfaceWidth = 1280;
         private const int SurfaceHeight = 720;
@@ -58,6 +58,9 @@ namespace Ryujinx.Graphics.Vulkan
         {
             SwapchainKHR oldSwapchain = _swapchain;
             _swapchainIsDirty = false;
+
+            // DLSS-G owns presentation while on: off before the swapchain changes (back on with the next valid frame).
+            FrameGenOff();
 
             for (int i = 0; i < _swapchainImageViews.Length; i++)
             {
@@ -536,6 +539,11 @@ namespace Ryujinx.Graphics.Vulkan
                 ImageLayout.General,
                 ImageLayout.PresentSrcKhr);
 
+            if (DlssG.Available)
+            {
+                FrameGenBeforeSubmit(cbs, view);
+            }
+
             _gd.CommandBufferPool.Return(
                 cbs,
                 [_imageAvailableSemaphores[semaphoreIndex]],
@@ -562,7 +570,19 @@ namespace Ryujinx.Graphics.Vulkan
             lock (_gd.QueueLock)
             {
                 long presentStart = System.Diagnostics.Stopwatch.GetTimestamp();
+
+                if (DlssG.Available)
+                {
+                    DlssG.Marker(4); // present start
+                }
+
                 _gd.SwapchainApi.QueuePresent(_gd.Queue, in presentInfo);
+
+                if (DlssG.Available)
+                {
+                    FrameGenAfterPresent();
+                }
+
                 Ryujinx.Common.BotwPc.GpuCounters.AddTicks(Ryujinx.Common.BotwPc.GpuCounters.Id.PresentTicks, presentStart);
             }
         }

@@ -79,6 +79,15 @@ namespace Ryujinx.Common.BotwPc
             }
         }
 
+        /// <summary>Records a region with explicit start and end (Stopwatch ticks) on the calling thread.</summary>
+        public static void Span(string name, long startTimestamp, long endTimestamp, string arg = null)
+        {
+            if (Configured)
+            {
+                Record(name, startTimestamp, endTimestamp, arg);
+            }
+        }
+
         private static void Record(string name, long start, long end, string arg)
         {
             if (end < _start)
@@ -117,7 +126,10 @@ namespace Ryujinx.Common.BotwPc
                 return;
             }
 
-            StringBuilder json = new("{\"traceEvents\":[\n");
+            // "origin": the Stopwatch timestamp of ts = 0 and the clock frequency, so samples taken by other tools with
+            // the same clock (GuestSampler --raw) can be placed on this timeline.
+            StringBuilder json = new(string.Create(CultureInfo.InvariantCulture,
+                $"{{\"origin\":{_origin},\"frequency\":{Stopwatch.Frequency},\"traceEvents\":[\n"));
             double us = 1e6 / Stopwatch.Frequency;
             bool first = true;
 

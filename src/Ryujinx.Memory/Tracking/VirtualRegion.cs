@@ -15,6 +15,9 @@ namespace Ryujinx.Memory.Tracking
 
         public bool Guest { get; }
 
+        /// <summary>Protection last applied (or recorded for application) to this region.</summary>
+        internal MemoryPermission LastPermission => _lastPermission;
+
         public VirtualRegion(MemoryTracking tracking, ulong address, ulong size, bool guest, MemoryPermission lastPermission = MemoryPermission.Invalid) : base(address, size)
         {
             _lastPermission = lastPermission;

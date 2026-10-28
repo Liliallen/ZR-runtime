@@ -70,6 +70,18 @@ namespace Ryujinx.HLE
         /// <summary>BOTW-PC: set only when a supported Breath of the Wild build is running.</summary>
         public BotwPc.BotwTiming BotwTiming { get; internal set; }
 
+        /// <summary>BOTW-PC: video playback detection (same condition as <see cref="BotwTiming"/>).</summary>
+        public BotwPc.BotwVideo BotwVideo { get; internal set; }
+
+        /// <summary>BOTW-PC test aid: per-frame guest value log (BOTWPC_WATCH), null when off.</summary>
+        public BotwPc.BotwWatch BotwWatch { get; internal set; }
+
+        /// <summary>VSync mode for frame pacing: <see cref="VSyncMode"/>, but stock Switch VSync while BotW plays a video.</summary>
+        public VSyncMode PacingVSyncMode => VSyncMode != VSyncMode.Switch && BotwVideo is { IsPlaying: true } ? VSyncMode.Switch : VSyncMode;
+
+        /// <summary>Emulated VBlank rate matching <see cref="PacingVSyncMode"/>.</summary>
+        public long PacingVSyncInterval => PacingVSyncMode == VSyncMode ? TargetVSyncInterval : 60;
+
         public Switch(HleConfiguration configuration)
         {
             ArgumentNullException.ThrowIfNull(configuration.GpuRenderer);

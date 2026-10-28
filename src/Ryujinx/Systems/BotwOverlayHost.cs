@@ -40,7 +40,7 @@ namespace Ryujinx.Ava.Systems
         private readonly OverlayPainter _painter = new();
         private readonly NavRepeat _padNav = new(), _keyNav = new();
         private readonly Stopwatch _clock = Stopwatch.StartNew();
-        private readonly bool _zh;
+        private readonly bool _uiZh;
 
         private OverlayMenu _menu;
         private bool _open, _closing, _pausedByUs, _keyInsertDown, _mouseDown;
@@ -54,14 +54,29 @@ namespace Ryujinx.Ava.Systems
         public BotwOverlayHost(Callbacks callbacks)
         {
             _cb = callbacks;
-            _zh = (ConfigurationState.Instance.UI.LanguageCode.Value ?? "").StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+            _uiZh = (ConfigurationState.Instance.UI.LanguageCode.Value ?? "").StartsWith("zh", StringComparison.OrdinalIgnoreCase);
             OverlayInputGate.Enabled = Settings.Overlay.Enabled;
             OverlayInputGate.ChordWindowMs = Settings.Overlay.ChordWindowMs;
         }
 
         private static BotwPcSettings Settings => BotwPcSettings.Instance;
 
-        private string T(string en, string zh) => _zh ? zh : en;
+        private string T(string en, string zh) => Chinese ? zh : en;
+
+        // Menu language: BOTWPC_OVERLAY_LANG (en|zh, e.g. from a launcher), else the setting, else Ryujinx's UI language.
+        private static readonly string _languageOverride = Environment.GetEnvironmentVariable("BOTWPC_OVERLAY_LANG")?.ToLowerInvariant();
+
+        private bool Chinese => _languageOverride switch
+        {
+            "en" => false,
+            "zh" => true,
+            _ => Settings.Overlay.Language switch
+            {
+                MenuLanguage.English => false,
+                MenuLanguage.Chinese => true,
+                _ => _uiZh,
+            },
+        };
 
         // ------------------------------------------------------------------ per poll
 
@@ -410,6 +425,51 @@ namespace Ryujinx.Ava.Systems
                          $"實驗性：快速轉鏡頭時植物和 Link 身後會有殘影。輸入是遊戲自己的渲染解析度。目前：{state}。");
             }
 
+            FrameGenerationMode[] fgModes = [FrameGenerationMode.Off, FrameGenerationMode.X2, FrameGenerationMode.X3, FrameGenerationMode.X4];
+            int[] fgLimits = [0, 120, 144, 160, 180, 240];
+
+            // Live while Streamline is loaded (it has to be loaded before Vulkan, i.e. at game start); saved either way.
+            FrameGenerationMode CurrentFrameGeneration() => DlssRuntime.FrameGenAvailable
+                ? (FrameGenerationMode)DlssRuntime.FrameGenFrames
+                : Settings.Graphics.FrameGeneration;
+
+            void SetFrameGeneration(FrameGenerationMode v)
+            {
+                Settings.Graphics.FrameGeneration = v;
+
+                if (DlssRuntime.FrameGenAvailable)
+                {
+                    DlssRuntime.FrameGenFrames = (int)v;
+                }
+            }
+
+            string FrameGenerationState()
+            {
+                string status = DlssRuntime.FrameGenStatus ?? "";
+
+                return status.StartsWith("on") ? T($"running ({DlssRuntime.FrameGenFrames + 1}×)", $"運作中（{DlssRuntime.FrameGenFrames + 1} 倍）")
+                    : status.StartsWith("paused") ? T("paused (menu, map or loading screen)", "暫停中（選單、地圖或讀取畫面）")
+                    : status == "off" ? T("off", "關閉")
+                    : status == "ready" ? T("ready", "待命")
+                    : status;
+            }
+
+            string FrameGenerationNote()
+            {
+                string start = GraphicsSettings.FrameGenerationOverridden
+                    ? T(" The launcher sets BOTWPC_DLSSG, which decides the mode at the next start.", "啟動檔設定了 BOTWPC_DLSSG，下次啟動時以它為準。")
+                    : "";
+
+                if (!DlssRuntime.FrameGenAvailable)
+                {
+                    return T($"Takes effect at the next start (frame generation was not loaded: {DlssRuntime.FrameGenStatus}).{start}",
+                             $"下次啟動生效（這次啟動時沒有載入補幀：{DlssRuntime.FrameGenStatus}）。{start}");
+                }
+
+                return T($"NVIDIA DLSS inserts generated frames between game frames (RTX 50: up to 4×). Smoother, about one frame more input lag. Now: {FrameGenerationState()}.{start}",
+                         $"NVIDIA DLSS 在遊戲幀之間插入 AI 生成的畫面（RTX 50 最多 4 倍）。更順，但按鍵延遲約多一幀；倍數越高，快速移動的物體越容易扭曲。目前：{FrameGenerationState()}。{start}");
+            }
+
             ScalingFilter[] filters = [ScalingFilter.Bilinear, ScalingFilter.Nearest, ScalingFilter.Fsr, ScalingFilter.Area];
             AntiAliasing[] aa = [AntiAliasing.None, AntiAliasing.Fxaa, AntiAliasing.SmaaLow, AntiAliasing.SmaaMedium, AntiAliasing.SmaaHigh, AntiAliasing.SmaaUltra];
 
@@ -436,6 +496,18 @@ namespace Ryujinx.Ava.Systems
                         Enabled = () => Graphics.ScalingFilter.Value == ScalingFilter.Fsr,
                         Note = () => T("Only with the FSR 1 output filter.", "只在輸出濾鏡為 FSR 1 時有效。"),
                     },
+                    Header(T("FRAME GENERATION", "補幀")),
+                    Choice(T("DLSS Frame Generation", "DLSS 補幀"), fgModes, CurrentFrameGeneration, SetFrameGeneration,
+                        v => v switch { FrameGenerationMode.X2 => "2×", FrameGenerationMode.X3 => "3×", FrameGenerationMode.X4 => "4×", _ => T("Off", "關閉") },
+                        FrameGenerationNote),
+                    Choice(T("Shown-frame limit", "畫面幀數上限"), fgLimits, () => DlssRuntime.FrameGenAvailable ? DlssRuntime.FrameGenFpsLimit : Settings.Graphics.FrameGenerationFpsLimit,
+                        v => { Settings.Graphics.FrameGenerationFpsLimit = v; DlssRuntime.FrameGenFpsLimit = v; },
+                        v => v == 0 ? T("None", "不限制") : $"{v} FPS",
+                        () => T("Vulkan frame generation has no VSync: keep this under the display's refresh rate or the image tears. Game FPS = limit ÷ multiplier (160 at 2× = 80 game FPS).",
+                                "Vulkan 的補幀不能開 VSync：設在螢幕更新率以下，否則畫面會撕裂。遊戲幀數 = 上限 ÷ 倍數（160、2 倍 = 遊戲 80 幀）。")),
+                    Info(T("Frames", "幀數"), () => _hud.FrameGenerationText(T),
+                        () => T("Generation pauses in menus (including this one), the map, loading screens and when the game window is not in front.",
+                                "選單（包括這個選單）、地圖、讀取畫面，以及遊戲視窗不在最前面時，補幀會暫停。")),
                     Header(T("IMAGE", "畫面")),
                     Choice(T("Resolution scale", "解析度倍率"), [1, 2, 3, 4], () => Graphics.ResScale.Value, v => OnUi(() => Graphics.ResScale.Value = v), v => $"{v}×",
                         () => T("Ryujinx renders the game's targets at this multiple (DLSS input grows with it). Costs GPU time.",
@@ -676,6 +748,13 @@ namespace Ryujinx.Ava.Systems
             Title = T("System", "系統"),
             Items =
             [
+                Choice(T("Menu language", "選單語言"), [MenuLanguage.Auto, MenuLanguage.English, MenuLanguage.Chinese], () => Settings.Overlay.Language,
+                    v => Settings.Overlay.Language = v,
+                    v => v switch { MenuLanguage.English => "English", MenuLanguage.Chinese => "中文", _ => T("Auto (UI language)", "自動（跟隨介面語言）") },
+                    () => _languageOverride is "en" or "zh"
+                        ? T("Fixed by the launcher (BOTWPC_OVERLAY_LANG).", "由啟動檔固定（BOTWPC_OVERLAY_LANG）。")
+                        : T("Takes effect the next time the menu opens. The game's own language does not change.", "下次開啟選單時生效。遊戲本身的語言不會改變。"),
+                    enabled: () => _languageOverride is not ("en" or "zh")),
                 Toggle(T("Pause game while open", "開啟時暫停遊戲"), () => Settings.Overlay.PauseGame, v => Settings.Overlay.PauseGame = v,
                     () => T("Uses Ryujinx's pause (game threads and audio stop). Takes effect the next time the menu opens.",
                             "使用 Ryujinx 的暫停（遊戲執行緒與音訊停止）。下次開啟選單時生效。")),

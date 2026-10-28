@@ -311,7 +311,7 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
                 int vecIndex = cbufOffset >> 2;
                 int elemIndex = cbufOffset & 3;
 
-                ResourceManager.SetUsedConstantBufferBinding(binding);
+                ResourceManager.SetUsedConstantBufferBinding(binding, (vecIndex + 1) * 16);
 
                 IAstNode[] sources =
                 [

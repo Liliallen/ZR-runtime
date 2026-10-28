@@ -28,6 +28,9 @@ namespace Ryujinx.Graphics.Gpu.Shader
         /// <param name="info">Shader program information</param>
         /// <param name="code">Maxwell binary shader code</param>
         /// <param name="cb1Data">Constant buffer 1 data accessed by the shader</param>
+        /// <summary>GPU V3: write tracking of the code in guest memory (<see cref="ShaderCache"/>), or null.</summary>
+        internal ShaderCodeWatch Watch;
+
         public CachedShaderStage(ShaderProgramInfo info, byte[] code, byte[] cb1Data)
         {
             Info = info;

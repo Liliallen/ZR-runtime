@@ -75,6 +75,9 @@ namespace Ryujinx.Graphics.Vulkan
         internal HelperShader HelperShader { get; private set; }
         internal PipelineFull PipelineInternal => _pipeline;
 
+        /// <summary>BOTW-PC DLSS-G inputs of the frame being rendered, written by the pipeline and tagged at present.</summary>
+        internal DlssGInputs FrameGenInputs { get; } = new();
+
         internal BarrierBatch Barriers { get; private set; }
 
         public IPipeline Pipeline => _pipeline;
@@ -130,7 +133,7 @@ namespace Ryujinx.Graphics.Vulkan
             string preferredGpuId,
             Func<Instance, Vk, SurfaceKHR> getSurface,
             Func<string[]> getRequiredExtensions
-        ) => new(OperatingSystem.IsIOS() ? MVKInitialization.GetApi() : Vk.GetApi(), getSurface, getRequiredExtensions, preferredGpuId);
+        ) => new(OperatingSystem.IsIOS() ? MVKInitialization.GetApi() : DlssG.CreateApi(), getSurface, getRequiredExtensions, preferredGpuId);
 
         private unsafe void LoadFeatures(uint maxQueueCount, uint queueFamilyIndex)
         {
@@ -509,6 +512,7 @@ namespace Ryujinx.Graphics.Vulkan
             _device = VulkanInitialization.CreateDevice(Api, _instance.Instance, _physicalDevice, queueFamilyIndex, maxQueueCount, out bool fifoLatestReadyEnabled, out string[] deviceExtensions);
             SupportsPresentModeFifoLatestReady = fifoLatestReadyEnabled;
             Dlss.Init(Api, _instance.Instance, _physicalDevice.PhysicalDevice, _device, deviceExtensions);
+            DlssG.Init(_physicalDevice.PhysicalDevice);
 
             if (Api.TryGetDeviceExtension(_instance.Instance, _device, KhrSwapchain.ExtensionName, ctx => new KhrSwapchain(ctx), out KhrSwapchain swapchainApi))
             {
@@ -1090,6 +1094,9 @@ namespace Ryujinx.Graphics.Vulkan
                 sampler.Dispose();
             }
 
+            // Streamline must shut down before the device it hooked is destroyed.
+            DlssG.Shutdown();
+
             SurfaceApi.DestroySurface(_instance.Instance, _surface, null);
 
             Api.DestroyDevice(_device, null);
@@ -1100,9 +1107,14 @@ namespace Ryujinx.Graphics.Vulkan
             _instance.Dispose();
         }
 
+        // BOTW-PC: importing guest memory for texture flush buffers costs ~65 ms per import in the NVIDIA driver (616.92);
+        // BotW's world load does ~30 in a row, stalling the GPU thread ~2 s and sometimes ending in a TDR (nvlddmkm 153,
+        // VK_ERROR_DEVICE_LOST). Without the import the flush uses a host buffer and one copy. BOTWPC_HOST_IMPORT=1 restores it.
+        private static readonly bool _hostImportEnabled = System.Environment.GetEnvironmentVariable("BOTWPC_HOST_IMPORT") == "1";
+
         public bool PrepareHostMapping(nint address, ulong size)
         {
-            return Capabilities.SupportsHostImportedMemory &&
+            return _hostImportEnabled && Capabilities.SupportsHostImportedMemory &&
                 HostMemoryAllocator.TryImport(BufferManager.HostImportedBufferMemoryRequirements, BufferManager.DefaultBufferMemoryFlags, address, size);
         }
     }

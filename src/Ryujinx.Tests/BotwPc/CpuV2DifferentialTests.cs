@@ -911,5 +911,78 @@ namespace Ryujinx.Tests.BotwPc
         {
             RunCampaign(200_001 + batch * 250, 250, CpuV2Features.Exact | CpuV2Features.AbiCallLiveness, abiFlags: true, abiTemps: true);
         }
+
+        /// <summary>CPU V3: the register-preserving synchronization stub, called at almost every function entry and
+        /// loop back edge (interval 1), must leave every register and the data memory as Unicorn does.</summary>
+        [Test]
+        public void PreservingSyncCallMatchesUnicorn([Values(0, 1)] int batch)
+        {
+            int saved = ExecutionContext.SyncCheckInterval;
+            ExecutionContext.SyncCheckInterval = 1;
+
+            try
+            {
+                RunCampaign(300_001 + batch * 250, 250, CpuV2Features.Exact | CpuV2Features.PreservingSyncCall, abiFlags: false, abiTemps: false);
+                RunCampaign(310_001 + batch * 250, 250, CpuV2Features.Exact | CpuV2Features.AbiFlagLiveness | CpuV2Features.PreservingSyncCall, abiFlags: true, abiTemps: false);
+            }
+            finally
+            {
+                ExecutionContext.SyncCheckInterval = saved;
+            }
+        }
+
+        /// <summary>CPU V3: floating-point values held in caller-saved XMM registers across a loop back edge survive
+        /// the synchronization stub (the random programs are integer only).</summary>
+        [Test]
+        public void PreservingSyncCallKeepsVectorRegisters([Values(1, 2, 7)] int interval)
+        {
+            Program p = new();
+            List<uint> w = p.Words;
+
+            for (int d = 0; d < 12; d++)
+            {
+                w.Add(0x9E620000u | ((uint)(d + 1) << 5) | (uint)d); // scvtf d<d>, x<d+1> (finite values)
+            }
+
+            w.Add(0xD2800000u); // movz x0, #0
+            int loop = w.Count;
+
+            for (int d = 0; d < 12; d += 2)
+            {
+                w.Add(0x1E602800u | ((uint)(d + 1) << 16) | ((uint)d << 5) | (uint)d); // fadd d<d>, d<d>, d<d+1>
+            }
+
+            w.Add(0x8B020021u); // add x1, x1, x2 (an integer value carried around the loop too)
+            w.Add(0x91000400u); // add x0, x0, #1
+            w.Add(0xF103201Fu); // cmp x0, #200
+            int back = loop - w.Count;
+            w.Add(0x5400000Bu | (((uint)back & 0x7FFFF) << 5)); // b.lt loop
+
+            for (int d = 0; d < 12; d++)
+            {
+                w.Add(0x9E660000u | ((uint)d << 5) | (uint)(d + 3)); // fmov x<d+3>, d<d>
+            }
+
+            p.EndIndex = w.Count;
+            w.Add(0xD65F03C0u); // ret
+
+            int saved = ExecutionContext.SyncCheckInterval;
+            ExecutionContext.SyncCheckInterval = interval;
+
+            try
+            {
+                for (int seed = 1; seed <= 20; seed++)
+                {
+                    State reference = RunUnicorn(p, seed);
+                    State v3 = RunArmeilleure(p, seed, CpuV2Features.Exact | CpuV2Features.PreservingSyncCall);
+                    string error = Compare(reference, v3, flags: true, temps: true);
+                    Assert.That(error, Is.Null, $"seed {seed}, interval {interval}: {error}");
+                }
+            }
+            finally
+            {
+                ExecutionContext.SyncCheckInterval = saved;
+            }
+        }
     }
 }

@@ -77,6 +77,11 @@ namespace Ryujinx.Graphics.Vulkan
             _useMirrors = gd.IsTBDR;
         }
 
+        // Uniform renaming (nxnative's UB renaming) on non-TBDR GPUs: an update to a range in use by the current command
+        // buffer goes to a mirror instead of an inline update that ends the render pass. Experimental, off unless
+        // BOTWPC_UB_MIRRORS=1 or compared in-run through BOTWPC_AB_SWITCHES.
+        private static readonly Ryujinx.Common.BotwPc.AbPhase.Switch _desktopMirrors = new("BOTWPC_UB_MIRRORS", experimental: true);
+
         public BufferHolder(VulkanRenderer gd, Device device, VkBuffer buffer, Auto<MemoryAllocation> allocation, int size, BufferAllocationType type, BufferAllocationType currentType, int offset)
         {
             _gd = gd;
@@ -193,6 +198,24 @@ namespace Ryujinx.Graphics.Vulkan
                 return true;
             }
 
+            // Desktop mirrors: bindings clamped to what each shader reads (BOTWPC_UB_CLAMP) start at the same offset with
+            // different sizes; a larger mirror at the same offset holds the same data, so reuse it.
+            if (!_useMirrors && _mirrors.Count != 0)
+            {
+                foreach ((ulong otherKey, StagingBufferReserved other) in _mirrors)
+                {
+                    (int otherOffset, int otherSize) = FromMirrorKey(otherKey);
+
+                    if (otherOffset == offset && otherSize >= size)
+                    {
+                        buffer = other.Buffer.GetBuffer();
+                        offset = other.Offset;
+
+                        return true;
+                    }
+                }
+            }
+
             // Is this mirror allowed to exist? Can't be used for write in any in-flight write.
             if (_waitable.IsBufferRangeInUse(offset, size, true))
             {
@@ -213,6 +236,8 @@ namespace Ryujinx.Graphics.Vulkan
             if (newMirror != null)
             {
                 StagingBufferReserved mirror = newMirror.Value;
+                Ryujinx.Common.BotwPc.GpuCounters.Add(Ryujinx.Common.BotwPc.GpuCounters.Id.MirrorCreates);
+                Ryujinx.Common.BotwPc.GpuCounters.Add(Ryujinx.Common.BotwPc.GpuCounters.Id.MirrorCreateBytes, size);
                 _pendingDataRanges.FillData(baseData, modData, offset, new Span<byte>((void*)(mirror.Buffer._map + mirror.Offset), size));
 
                 if (_mirrors.Count == 0)
@@ -289,6 +314,46 @@ namespace Ryujinx.Graphics.Vulkan
             if (_pendingData != null)
             {
                 _mirrors.Clear();
+
+                if (!_useMirrors)
+                {
+                    SettlePendingData();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Desktop mirrors (BOTWPC_UB_MIRRORS): writes pending data that no command buffer uses any more straight into the
+        /// mapped buffer, so it is not mirrored again in every later command buffer (GPU V3 submits ~20 per frame).
+        /// </summary>
+        private unsafe void SettlePendingData()
+        {
+            if (_map == nint.Zero || _pendingDataRanges.Count() == 0)
+            {
+                return;
+            }
+
+            List<BufferMirrorRangeList.Range> settled = null;
+
+            foreach (BufferMirrorRangeList.Range range in _pendingDataRanges.All())
+            {
+                if (!_waitable.IsBufferRangeInUse(range.Offset, range.Size, false))
+                {
+                    (settled ??= []).Add(range);
+                }
+            }
+
+            if (settled == null)
+            {
+                return;
+            }
+
+            foreach (BufferMirrorRangeList.Range range in settled)
+            {
+                WaitForFences(range.Offset, range.Size);
+                _pendingData.AsSpan(range.Offset, range.Size).CopyTo(new Span<byte>((void*)(_map + range.Offset), range.Size));
+                _pendingDataRanges.Remove(range.Offset, range.Size);
+                Ryujinx.Common.BotwPc.GpuCounters.Add(Ryujinx.Common.BotwPc.GpuCounters.Id.MirrorSettles);
             }
         }
 
@@ -514,7 +579,7 @@ namespace Ryujinx.Graphics.Vulkan
                 return;
             }
 
-            bool allowMirror = _useMirrors && allowCbsWait && cbs != null && _activeType <= BufferAllocationType.HostMapped;
+            bool allowMirror = (_useMirrors || _desktopMirrors.IsOn) && allowCbsWait && cbs != null && _activeType <= BufferAllocationType.HostMapped;
 
             if (_map != nint.Zero)
             {
@@ -573,7 +638,12 @@ namespace Ryujinx.Graphics.Vulkan
 
             if (_pendingData != null)
             {
-                _pendingDataRanges.Remove(offset, dataSize);
+                bool removed = _pendingDataRanges.Remove(offset, dataSize);
+                if (RemoveOverlappingMirrors(offset, dataSize) || removed)
+                {
+                    // A mirror of this range would now hold stale data (mirrors switched off in-run): rebind to the buffer.
+                    _gd.PipelineInternal.Rebind(_buffer, offset, dataSize);
+                }
             }
 
             if (cbs != null &&
@@ -671,6 +741,11 @@ namespace Ryujinx.Graphics.Vulkan
             if ((dstOffset & 3) != 0 || (data.Length & 3) != 0)
             {
                 return false;
+            }
+
+            if (endRenderPass != null && _gd.PipelineInternal.RenderPassActive)
+            {
+                Ryujinx.Common.BotwPc.GpuCounters.Add(Ryujinx.Common.BotwPc.GpuCounters.Id.UpInlineSplits);
             }
 
             endRenderPass?.Invoke();

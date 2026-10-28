@@ -31,7 +31,7 @@ namespace Ryujinx.Horizon.MmNv.Ipc
 
             lock (_sessionList)
             {
-                _sessionList.Remove(GetSessionByModule(module));
+                Unregister(GetSessionByModule(module));
             }
 
             return Result.Success;
@@ -84,7 +84,7 @@ namespace Ryujinx.Horizon.MmNv.Ipc
 
             lock (_sessionList)
             {
-                _sessionList.Remove(GetSessionById(requestId));
+                Unregister(GetSessionById(requestId));
             }
 
             return Result.Success;
@@ -153,7 +153,21 @@ namespace Ryujinx.Horizon.MmNv.Ipc
 
                 _sessionList.Add(session);
 
+                if (module == Module.NvDec)
+                {
+                    Ryujinx.Common.BotwPc.VideoDecodeSessions.OnOpened();
+                }
+
                 return session.Id;
+            }
+        }
+
+        private void Unregister(Session session)
+        {
+            if (_sessionList.Remove(session) && session.Module == Module.NvDec)
+            {
+                // BOTW-PC: the video ended (see BotwVideo).
+                Ryujinx.Common.BotwPc.VideoDecodeSessions.OnClosed();
             }
         }
     }

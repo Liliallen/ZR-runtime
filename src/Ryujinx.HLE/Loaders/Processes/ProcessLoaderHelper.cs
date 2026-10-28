@@ -448,11 +448,14 @@ namespace Ryujinx.HLE.Loaders.Processes
             }
 
             device.BotwTiming = botwVersion != null ? new BotwPc.BotwTiming(process.CpuMemory, botwMainBase, botwVersion) : null;
+            device.BotwVideo = botwVersion != null ? new BotwPc.BotwVideo() : null;
+            device.BotwWatch = botwVersion != null ? BotwPc.BotwWatch.FromEnvironment(process.CpuMemory, botwMainBase) : null;
 
             if (botwVersion != null)
             {
                 BotwPc.BotwUiTiming.Apply(process.CpuMemory, botwMainBase, botwVersion);
                 BotwPc.BotwInputRepeat.Apply(process.CpuMemory, botwMainBase, botwVersion);
+                BotwPc.BotwFrameScale.Apply(process.CpuMemory, botwMainBase, botwVersion);
             }
 
             // BOTW-PC: ahead-of-time image coverage (after the in-memory patches above, which change hashed code).

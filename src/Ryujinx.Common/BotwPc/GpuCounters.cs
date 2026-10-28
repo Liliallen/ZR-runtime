@@ -128,6 +128,23 @@ namespace Ryujinx.Common.BotwPc
 
             // GPU time domain: union of command-buffer execution intervals from Vulkan timestamps.
             GpuBusyTicks,
+
+            // GPU V3 shader code watch: lookups answered by a clean tracking handle / byte comparisons still done.
+            ShaderWatchHits,
+            ShaderWatchCompares,
+
+            // Memory V3: region protection changes recorded during multi-region scans, and the calls that applied them.
+            ReprotectsDeferred,
+            ReprotectsCoalesced,
+
+            // Render thread: render passes begun, and inline buffer updates that had to end an active render pass.
+            RenderPassBegins,
+            UpInlineSplits,
+
+            // Uniform buffer mirrors: mirrors built (and bytes copied into them), pending ranges written back once unused.
+            MirrorCreates,
+            MirrorCreateBytes,
+            MirrorSettles,
             Count,
         }
 

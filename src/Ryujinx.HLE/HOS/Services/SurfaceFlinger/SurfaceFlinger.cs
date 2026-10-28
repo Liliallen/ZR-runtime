@@ -90,8 +90,8 @@ namespace Ryujinx.HLE.HOS.Services.SurfaceFlinger
             }
             else
             {
-                _ticksPerFrame = ((Stopwatch.Frequency / _device.TargetVSyncInterval) * 100) / _device.TickScalar;
-                _targetVSyncInterval = _device.TargetVSyncInterval;
+                _ticksPerFrame = ((Stopwatch.Frequency / _device.PacingVSyncInterval) * 100) / _device.TickScalar;
+                _targetVSyncInterval = _device.PacingVSyncInterval;
             }
         }
 
@@ -387,20 +387,23 @@ namespace Ryujinx.HLE.HOS.Services.SurfaceFlinger
 
                 if (acquireStatus == Status.Success)
                 {
-                    if (_device.VSyncMode == VSyncMode.Unbounded)
+                    // BOTW-PC: stock Switch VSync while BotW plays a video (see BotwVideo).
+                    VSyncMode vSyncMode = _device.PacingVSyncMode;
+
+                    if (vSyncMode == VSyncMode.Unbounded)
                     {
                         if (_swapInterval != 0)
                         {
                             UpdateSwapInterval(0);
-                            _vSyncMode = _device.VSyncMode;
+                            _vSyncMode = vSyncMode;
                         }
                     }
-                    else if (_device.VSyncMode != _vSyncMode)
+                    else if (vSyncMode != _vSyncMode)
                     {
-                        UpdateSwapInterval(_device.VSyncMode == VSyncMode.Unbounded ? 0 : item.SwapInterval);
-                        _vSyncMode = _device.VSyncMode;
+                        UpdateSwapInterval(item.SwapInterval);
+                        _vSyncMode = vSyncMode;
                     }
-                    else if (item.SwapInterval != _swapInterval || _device.TargetVSyncInterval != _targetVSyncInterval)
+                    else if (item.SwapInterval != _swapInterval || _device.PacingVSyncInterval != _targetVSyncInterval)
                     {
                         UpdateSwapInterval(item.SwapInterval);
                     }
@@ -550,14 +553,18 @@ namespace Ryujinx.HLE.HOS.Services.SurfaceFlinger
         {
             Ryujinx.Common.BotwPc.TimelineTrace.OnGuestFrame();
             _device.Statistics.RecordGameFrameTime();
-            _device.BotwTiming?.OnFrameQueued(_device.VSyncMode);
+            _device.BotwTiming?.OnFrameQueued(_device.PacingVSyncMode);
+            _device.BotwWatch?.OnFrame();
+            ARMeilleure.Diagnostics.GuestProbe.OnFrame();
         }
 
         public void OnFrameReplaced(ref BufferItem item)
         {
             Ryujinx.Common.BotwPc.TimelineTrace.OnGuestFrame();
             _device.Statistics.RecordGameFrameTime();
-            _device.BotwTiming?.OnFrameQueued(_device.VSyncMode);
+            _device.BotwTiming?.OnFrameQueued(_device.PacingVSyncMode);
+            _device.BotwWatch?.OnFrame();
+            ARMeilleure.Diagnostics.GuestProbe.OnFrame();
         }
 
         public void OnBuffersReleased() { }
